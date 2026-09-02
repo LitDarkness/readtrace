@@ -63,6 +63,15 @@ VERSION=v0.1.0 bash scripts/package-release-macos.sh
 
 脚本会用 `dylibbundler` 收集 Tesseract 和 Poppler 需要的动态库，并把它们放在压缩包的 `tools/*/lib` 目录。输出在 `dist/readtrace-v0.1.0-macos-arm64.tar.gz`。
 
+用户解压后可直接启动：
+
+```bash
+tar -xzf readtrace-v0.1.0-macos-arm64.tar.gz
+cd readtrace-v0.1.0-macos-arm64
+chmod +x readtrace
+./readtrace serve
+```
+
 如果语言数据在自定义目录，可这样指定：
 
 ```bash
