@@ -122,6 +122,11 @@ foreach ($source in $licenseSources) {
     }
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination "$stage\LICENSES\readtrace-MIT.txt" -Force
+if (Test-Path -LiteralPath (Join-Path $projectRoot "LICENSES") -PathType Container) {
+    Get-ChildItem -LiteralPath (Join-Path $projectRoot "LICENSES") -File |
+        Where-Object { $_.Name -ne "README.md" } |
+        Copy-Item -Destination "$stage\LICENSES" -Force
+}
 Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination "$stage\THIRD_PARTY_NOTICES.md" -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination "$stage\README.md" -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\QUICK_START.md") -Destination "$stage\QUICK_START.md" -Force

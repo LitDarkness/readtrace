@@ -1,0 +1,12 @@
+Poppler notice
+==============
+
+The Poppler executables and libraries in a ReadTrace release remain under the
+GNU General Public License and any additional notices shipped by the selected
+build. This file is a pointer, not a replacement for the vendor's COPYING
+files: the packaging scripts copy those files when the distribution provides
+them.
+
+Project: https://poppler.freedesktop.org/
+Source:  https://gitlab.freedesktop.org/poppler/poppler
+GPL text: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html

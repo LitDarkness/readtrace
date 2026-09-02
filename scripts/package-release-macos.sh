@@ -84,6 +84,9 @@ find "$(brew --prefix tesseract)" "$(brew --prefix poppler)" -maxdepth 6 \
   done
 
 cp LICENSE "$STAGE/LICENSES/readtrace-MIT.txt"
+if [[ -d LICENSES ]]; then
+  find LICENSES -maxdepth 1 -type f ! -name 'README.md' -exec cp {} "$STAGE/LICENSES/" \;
+fi
 cp THIRD_PARTY_NOTICES.md "$STAGE/THIRD_PARTY_NOTICES.md"
 cp README.md "$STAGE/README.md"
 cp docs/QUICK_START.md "$STAGE/QUICK_START.md"
