@@ -4662,11 +4662,32 @@ fn resolve_ocr_binary(env_name: &str, fallback: &str, candidates: &[&str]) -> St
             return value;
         }
     }
-    candidates
-        .iter()
-        .find(|candidate| Path::new(candidate).is_file())
-        .map(|candidate| (*candidate).into())
-        .unwrap_or_else(|| fallback.into())
+    for candidate in candidates {
+        let path = Path::new(candidate);
+        if path.is_file() {
+            return path.to_string_lossy().into_owned();
+        }
+        if path.is_absolute() {
+            continue;
+        }
+        if let Some(executable_dir) = std::env::current_exe()
+            .ok()
+            .and_then(|executable| executable.parent().map(Path::to_path_buf))
+        {
+            let bundled = executable_dir.join(path);
+            if bundled.is_file() {
+                return bundled.to_string_lossy().into_owned();
+            }
+        }
+    }
+    fallback.into()
+}
+
+fn sibling_tessdata(binary: &str) -> Option<PathBuf> {
+    Path::new(binary)
+        .parent()
+        .map(|parent| parent.join("tessdata"))
+        .filter(|path| path.is_dir())
 }
 #[async_trait]
 impl OcrProvider for TesseractOcrProvider {
@@ -4909,7 +4930,8 @@ impl TesseractOcrProvider {
         path: &Path,
         page_number: usize,
     ) -> Result<OcrPage> {
-        let output = Command::new(&self.tesseract_bin)
+        let mut command = Command::new(&self.tesseract_bin);
+        command
             .arg(path)
             .arg("stdout")
             .arg("--psm")
@@ -4918,7 +4940,13 @@ impl TesseractOcrProvider {
             .arg(&self.languages)
             .arg("tsv")
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+        if std::env::var_os("TESSDATA_PREFIX").is_none() {
+            if let Some(tessdata) = sibling_tessdata(&self.tesseract_bin) {
+                command.env("TESSDATA_PREFIX", tessdata);
+            }
+        }
+        let output = command
             .output()
             .await
             .context("tesseract not found; install Tesseract OCR")?;
@@ -8072,5 +8100,24 @@ mod tests {
             "/does-not-exist/codex"
         };
         assert_eq!(resolve_codex_binary(configured), configured);
+    }
+
+    #[test]
+    fn packaged_tessdata_is_discovered_next_to_binary() {
+        let root = std::env::temp_dir().join(format!("readtrace-tessdata-{}", Uuid::new_v4()));
+        let tool_dir = root.join("tools").join("tesseract");
+        let binary = tool_dir.join(if cfg!(windows) {
+            "tesseract.exe"
+        } else {
+            "tesseract"
+        });
+        let tessdata = tool_dir.join("tessdata");
+        fs::create_dir_all(&tessdata).expect("create tessdata");
+        fs::write(&binary, b"placeholder").expect("create binary placeholder");
+        assert_eq!(
+            sibling_tessdata(&binary.to_string_lossy()),
+            Some(tessdata.clone())
+        );
+        fs::remove_dir_all(root).expect("remove test directory");
     }
 }

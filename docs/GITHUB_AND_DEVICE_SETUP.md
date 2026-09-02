@@ -6,6 +6,8 @@
 
 如果只是第一次启动并使用 Web 工作台，先看 [`QUICK_START.md`](QUICK_START.md)；本文保留完整的 GitHub、设备迁移和排错说明。
 
+如果你要给别人分发“解压即用”的 Windows/macOS 包，请直接看 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md)；本文的重点仍是源代码仓库、Provider Key 和 Vault 迁移。
+
 ## 一、首次上传到 GitHub
 
 ### 1. 提交前检查

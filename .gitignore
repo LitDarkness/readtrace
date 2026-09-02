@@ -1,6 +1,7 @@
 /target/
 /tmp/
 /outputs/
+/dist/
 *.db
 *.tmp
 .env

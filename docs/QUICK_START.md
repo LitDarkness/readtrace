@@ -27,7 +27,7 @@ cargo --version
 
 ## 2. Windows：安装 Tesseract 和 Poppler
 
-Windows 没有一个叫 tesseract-lang 的通用命令。tesseract-lang 是 Homebrew 下的语言数据包名称；Windows 要安装 Tesseract 主程序，并确认 tessdata 中有简体中文训练数据 chi_sim。Tesseract 官方安装说明列出了 Windows 安装器和语言数据的放置位置：[tessdoc Installation](https://tesseract-ocr.github.io/tessdoc/Installation.html)。
+Tesseract 官方安装说明列出了 Windows 安装器和语言数据的放置位置：[tessdoc Installation](https://tesseract-ocr.github.io/tessdoc/Installation.html)。
 
 ### 2.1 安装 Tesseract
 

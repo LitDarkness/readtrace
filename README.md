@@ -11,6 +11,8 @@ ReadTrace 的边界很明确：
 
 如果是第一次使用，建议先看 [docs/QUICK_START.md](docs/QUICK_START.md)：它从 Windows/macOS 依赖安装开始，先启动 Web，再在 GUI 中配置 Provider、导入文件和完成一次问答。
 
+如果要给课程或个人设备分发程序，直接下载 GitHub Releases 中对应平台的压缩包即可；它已经包含 Tesseract、中文/英文语言数据、Poppler 和许可证，不需要复杂安装器。维护者的打包、标签和跨设备流程见 [docs/RELEASE_GUIDE.md](docs/RELEASE_GUIDE.md)。
+
 ## 1. 先理解三个路径
 
 以下命令均假设当前目录是项目根目录：
@@ -318,6 +320,7 @@ CNY = USD × usd_to_cny
 - [docs/CLI_END_TO_END_EXAMPLE.md](docs/CLI_END_TO_END_EXAMPLE.md)：从导入到合并、引用问答的可复制流程。
 - [docs/COMPLETE_FLOW_TUTORIAL.md](docs/COMPLETE_FLOW_TUTORIAL.md)：PDF、Markdown、TXT 和两张图片的完整示例。
 - [docs/GITHUB_AND_DEVICE_SETUP.md](docs/GITHUB_AND_DEVICE_SETUP.md)：GitHub、Windows/macOS、Key 和 Vault 迁移。
+- [docs/RELEASE_GUIDE.md](docs/RELEASE_GUIDE.md)：Windows/macOS 自包含压缩包、第三方许可证和 GitHub Release。
 - [docs/WEB_GUI_PROTOCOL.md](docs/WEB_GUI_PROTOCOL.md)：Web API 和 SSE 契约。
 - [docs/IMPLEMENTATION_AUDIT.md](docs/IMPLEMENTATION_AUDIT.md)：逐项验收、已知边界和检查结果。
 - [docs/DELIVERABLES_AND_COST_NOTES.md](docs/DELIVERABLES_AND_COST_NOTES.md)：课程交付清单与运行时/开发成本的分界。

@@ -1,0 +1,112 @@
+name: Release ReadTrace
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test workspace
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install stable Rust
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Format, lint and test
+        run: |
+          cargo fmt --all -- --check
+          cargo test --workspace
+          cargo clippy --workspace --all-targets -- -D warnings
+
+  windows:
+    name: Package Windows x86_64
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install Rust and OCR tools
+        shell: powershell
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          choco install tesseract poppler -y --no-progress
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          "PATH refreshed; tesseract=$(Get-Command tesseract.exe | Select-Object -ExpandProperty Source)"
+          "PATH refreshed; pdftoppm=$(Get-Command pdftoppm.exe | Select-Object -ExpandProperty Source)"
+      - name: Build self-contained package
+        shell: powershell
+        run: |
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $tesseract = (Get-Command tesseract.exe).Source
+          $pdftoppm = (Get-Command pdftoppm.exe).Source
+          & .\scripts\package-release.ps1 `
+            -Version "${{ github.ref_name }}" `
+            -TesseractBin $tesseract `
+            -PopplerBin $pdftoppm
+      - name: Upload Windows archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: readtrace-windows-x86_64
+          path: dist/readtrace-*-windows-x86_64.zip
+          if-no-files-found: error
+
+  macos:
+    name: Package macOS arm64
+    needs: test
+    # macos-14 is an Apple Silicon hosted runner. Do not change this to an
+    # Intel runner: the archive is deliberately native arm64 for this phase.
+    runs-on: macos-14
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install stable Rust
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Build self-contained package
+        shell: bash
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: bash scripts/package-release-macos.sh
+      - name: Upload macOS archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: readtrace-macos-arm64
+          path: dist/readtrace-*-macos-arm64.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs:
+      - windows
+      - macos
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged archives
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create release and upload archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum dist/readtrace-* > dist/SHA256SUMS.txt
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "ReadTrace ${GITHUB_REF_NAME}" \
+            --generate-notes
