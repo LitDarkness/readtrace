@@ -37,7 +37,7 @@ USD = uncached / 1,000,000 × input_price
 CNY = USD × USD_TO_CNY
 ```
 
-已知 OpenAI 模型和 GLM 5.3 Flash 会按价格表自动填入三档单价，并把 `pricing_version` 与单价快照写入每条记录；Codex Luna（`gpt-5.6-luna`）当前为 `$0.20/$0.02/$1.20`，GLM 5.3 Flash 当前为 `$0.15/$0.03/$0.50`（均为 input/cached/output，每百万 Token）。清华网关上的其它模型和自定义来源不猜价格，必须在 `.env` 设置实际价格：
+已知 OpenAI 模型、GLM‑5.2 和 GLM‑5.3 Flash 会按价格表自动填入三档单价，并把 `pricing_version` 与单价快照写入每条记录。Codex Luna（`gpt-5.6-luna`）当前为 `$0.20/$0.02/$1.20`，GLM‑5.3 Flash 为 `$0.15/$0.03/$0.50`，GLM‑5.2 根据 [Z.ai 官方价格页](https://docs.z.ai/guides/overview/pricing)在 2026-09-02 的标价为 `$1.40/$0.26/$4.40`（均为 input/cached input/output，每百万 Token）。学校网关若有不同结算价，应在 `.env` 设置实际价格覆盖：
 
 ```dotenv
 READTRACE_INPUT_PRICE=0
@@ -107,5 +107,6 @@ deliverables/
 
 - [`ARCHITECTURE_EXPLAINED.md`](ARCHITECTURE_EXPLAINED.md)：当前实现的模块、数据流、结构、Provider 和费用。
 - [`CLI_TUTORIAL.md`](CLI_TUTORIAL.md)：从 import 到 repair/build、删除、恢复和 Web API 的操作手册。
-- [`CLI_END_TO_END_EXAMPLE.md`](CLI_END_TO_END_EXAMPLE.md)：假设完全不了解项目时，从路径、导入、OCR、模型挡位到合并、引用问答和费用查看的可复制示例。
+- [`CLI_END_TO_END_EXAMPLE.md`](CLI_END_TO_END_EXAMPLE.md)：假设完全不了解项目时，从路径、导入、OCR、推理强度到合并、引用问答和费用查看的可复制示例。
+- [`GITHUB_AND_DEVICE_SETUP.md`](GITHUB_AND_DEVICE_SETUP.md)：Windows/macOS 安装、`.env`、迁移、Web 启动与排错。
 - `ARCHITECTURE_AND_SUBMISSION.md`、`ASRS.md`、`CORE_LOGIC_AND_DESIGN.md`：已同步为当前整页修复设计的课程说明/过程记录。

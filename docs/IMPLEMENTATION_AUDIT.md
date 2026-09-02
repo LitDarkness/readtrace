@@ -20,7 +20,7 @@ CLI 和 `readtrace-core` 的核心链路已经可以完整演示：导入、按�
 | P0 | batch/unit 删除先预览，`--confirm` 才执行；运行台账和事件保留 | 通过 |
 | P0 | 每页 checkpoint 可续跑；多页 repair 和 PDF OCR 默认最多 4 路并行，结果仍按原始顺序落盘 | 通过 |
 | P0 | runtime ledger 按 `call_id` 合并去重，包含 `tmp` 下自定义 `.jsonl` 测试账本 | 通过 |
-| P0 | OpenAI 和 GLM 5.3 Flash 自动套用已记录的 input/cached/output 价格；其它自定义模型保持显式配置 | 通过 |
+| P0 | OpenAI、GLM‑5.2 和 GLM‑5.3 Flash 自动套用已记录的 input/cached/output 价格；其它自定义模型保持显式配置 | 通过 |
 
 ## 计费与并发审计
 
@@ -47,7 +47,7 @@ CNY = USD×usd_to_cny
 
 如果 input/output Token 或对应单价不完整，费用保持 `null`，并计入 `unknown_cost_calls`；不会以字符数估算，也不会把缺失价格当成 0。读取旧账本时，只要真实记录已经包含 input/output，就会按 model 的官方单价回填并写回；Mock 调用则明确记为非计费 `$0`。重复账本合并时，含 cached usage、request id 或费用的完整记录优先保留。
 
-当前内置模型价格来自模型价格表：[GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna)、[GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra)、[GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol)、[GPT-5.4](https://developers.openai.com/api/docs/models/gpt-5.4)、[GPT-5.5](https://developers.openai.com/api/docs/models/gpt-5.5)。目前记录的价格（USD/百万 Token）为：GPT-5.6 Luna `$0.20/$0.02/$1.20`，GLM 5.3 Flash `$0.15/$0.03/$0.50`（均为 input/cached/output）。学校平台的其它模型仍需在 `.env` 手工填入实际价格。
+当前内置模型价格来自模型价格表：[GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna)、[GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra)、[GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol)、[GPT-5.4](https://developers.openai.com/api/docs/models/gpt-5.4)、[GPT-5.5](https://developers.openai.com/api/docs/models/gpt-5.5) 和 [Z.ai 官方价格页](https://docs.z.ai/guides/overview/pricing)。目前记录的价格（USD/百万 Token）为：GPT-5.6 Luna `$0.20/$0.02/$1.20`，GLM‑5.3 Flash `$0.15/$0.03/$0.50`，GLM‑5.2 `$1.40/$0.26/$4.40`（均为 input/cached input/output）。学校平台有独立结算价时仍需在 `.env` 手工填入实际价格。
 
 `READTRACE_LLM_CONCURRENCY` 取值范围是 `1..64`，默认 `4`；`READTRACE_OCR_CONCURRENCY` 取值范围是 `1..16`，默认 `4`。`READTRACE_OCR_DPI` 默认 200，可在识别小字不敏感时降到 150。并行只作用于 Provider 请求或独立 Tesseract 子进程；文件写入、账本追加和最终页序仍在一个任务中顺序完成，因此不会产生损坏的 JSONL 或乱序 revision。PDF 先用 `pdfinfo` 获取页数，任务会产生 `0/N` 栅格化和 `n/N` 页级 OCR 事件。
 
@@ -65,7 +65,7 @@ cargo run --quiet -p readtrace-cli -- ocr-check
 cargo run --quiet -p readtrace-cli -- provider-check --preset codex-luna --speed high
 ```
 
-结果：格式检查、Clippy 通过；Workspace 测试共 74 项（core 66 项、server 8 项）全部通过；`ocr-check` 报告 Tesseract、Poppler/pdfinfo 和 OCR 并行度可用；Codex preset 配置显示 `gpt-5.6-luna`、`high`、官方价格和并发上限 4。Web 的模型选择默认落到 `GLM-5.2`，推理挡位默认是 `None`；用户仍可切换 `Codex Luna`、其它内置来源或自定义来源。显式把 `glm-*` 交给 Codex CLI 会被拒绝，避免 provider/model 错配。HTTP payload 回归测试覆盖 GLM-5.3 的 `reasoning_effort` 映射、有效挡位归一化和 GLM-5.2 的 disabled thinking；新增回归测试覆盖旧网页把 profile id 放入 `provider` 字段、多页 OCR 页级进度、clean 发布和 clean-only 搜索。
+结果：格式检查、Clippy 通过；Workspace 测试共 77 项（core 68 项、server 9 项）全部通过；`ocr-check` 报告 Tesseract、Poppler/pdfinfo 和 OCR 并行度可用；Codex preset 配置显示 `gpt-5.6-luna`、`high`、官方价格和并发上限 4。Web 的推理强度统一显示 `None/Low/Mid/High`，首次加载优先选择已配置 Key 的自定义 `GLM-5.2`；用户仍可切换 `Codex Luna`、其它内置来源或自定义来源。显式把 `glm-*` 交给 Codex CLI 会被拒绝，避免 provider/model 错配。HTTP payload 回归测试覆盖 GLM-5.3 的 `reasoning_effort` 映射、有效强度归一化和 GLM-5.2 的 disabled thinking；新增回归测试覆盖 GLM‑5.2 官方价格、跨平台 Windows 盘符上传路径拒绝、旧网页 profile id、多页 OCR 页级进度、clean 发布和 clean-only 搜索。
 
 本轮在受限 Codex 宿主中用同一条 `ai-check --provider codex-cli` 做了多组最小复现：移除会话环境变量、显式指定 `.cmd`/`.exe`、以及直接运行 `codex exec`，均在本机 app-server 初始化处收到 `拒绝访问 (os error 5)`；开启可写临时 `CODEX_HOME` 后又得到 `readonly database` 或 `UnknownIssuer`。这说明失败发生在受限宿主的文件权限/证书边界，而不是 ReadTrace 的模型、Token 或计费解析错误，也不是普通网络抖动。相同的 ReadTrace 命令在普通外部 PowerShell 环境成功返回 `gpt-5.6-luna` 的 `input_tokens=13822`、`output_tokens=5`、`total_tokens=13827` 和 request id；因此使用 Codex 时应从普通 PowerShell/Windows Terminal 启动，或在当前宿主改用 HTTP/GLM/Mock。适配器现在会保留原始尾部并给出上述行动建议，且不会复制 `auth.json` 或绕过 Codex 安全边界。学校 HTTP/GLM 探针验证了两种模型：GLM-5.3-Flash `none→reasoning_effort=low` 返回 200（input 28、cached 0、output 72、reasoning 69、total 100），GLM-5.2 `thinking.type=disabled` 返回 200（input 22、cached 0、output 1、reasoning 0、total 23）；两者均按模型价格记录。
 
@@ -86,7 +86,7 @@ cargo run --quiet -p readtrace-cli -- provider-check --preset codex-luna --speed
 - `GET /api/providers`、`POST /api/providers`、`POST /api/providers/check` 管理内置/自定义来源，Key 只写入本机配置且连接测试进入 ledger；`GET /api/sessions` 和 `GET /api/sessions/{id}` 支持阅读室历史侧栏恢复会话。
 - `POST /api/answer` 的问答引用分为 Vault `source_refs` 与用户选择的可读文件 `quotes`；GUI 的引用弹窗将 clean 全文搜索置于顶部，下面是可折叠的 clean 文件树，支持文件名/路径本地即时筛选和多选；raw OCR、图片、PDF、generated 历史和审计文件不会作为 quote 发送。
 - `POST /api/build`、确认 `POST /api/merge` 和确认 `POST /api/merge-units` 会自动发布 `clean/<name>/document.md`；`clean_name` 可自定义名称，响应返回 `clean_path`。generated revision 继续保留，便于人工对照和回溯。
-- `crates/readtrace-server/static/` 提供无构建步骤的工作台 GUI：左侧 Workspace/Vault 导航，工作台统计，可折叠文件树与“内容文件/显示全部”切换，Markdown/TXT 编辑保存，文件预览/删除，导入队列，OCR/repair/merge 分步处理，后台命令与事件、任务取消，跨 batch 合并选择，来源与 API 管理，独立检索页、搜索上下文、聊天页的弹出式引用选择器（搜索结果上方、可读文件多选下方）、会话侧栏、大对话区、revision 和费用查看均已接入。模型选择显示简洁模型名，推理挡位统一为 `None/Low/Mid/High`。
+- `crates/readtrace-server/static/` 提供无构建步骤的工作台 GUI：左侧 Workspace/Vault 导航，工作台统计，可折叠文件树与“内容文件/显示全部”切换，Markdown/TXT 编辑保存，文件预览/删除，导入队列，OCR/repair/merge 分步处理，后台命令与事件、任务取消，跨 batch 合并选择，来源与 API 管理，独立检索页、搜索上下文、聊天页的弹出式引用选择器（搜索结果上方、可读文件多选下方）、会话侧栏、大对话区、revision 和费用查看均已接入。模型选择显示来源名称、`内置/自定义` 和 Key 状态，推理强度统一为 `None/Low/Mid/High`。
 
 剩余事项主要是增强：统一 HTTP 错误状态码、为跨 batch merge 增加可视化排序编辑、增加预算停止条件和桌面打包；这些不阻塞当前 GUI 使用。
 

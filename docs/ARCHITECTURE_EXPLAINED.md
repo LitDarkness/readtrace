@@ -49,21 +49,21 @@ Workspace / Vault 导航
         │
         ├─ 工作台：统计、最近文件、下一步入口
         ├─ 文件浏览：可折叠文件树 → 预览 → 勾选 source/clean → 跨 batch 合并或删除
-        ├─ 导入队列：多个路径 + 复制策略 + 类型 + OCR/LLM/速度/合并偏好
+        ├─ 导入队列：多个路径 + 复制策略 + 类型 + OCR/LLM/推理强度/合并偏好
         ├─ 处理批次：OCR → 规范化 → 整页修复 → revision
         ├─ 后台：最近命令、事件完成态、任务进度、Token 与费用
-        ├─ 来源与 API：内置/自定义 Provider、密钥状态、价格和推理挡位
+        ├─ 来源与 API：内置/自定义 Provider、密钥状态、价格和推理强度
         ├─ 检索：本地全文查询 + 可读上下文
         └─ 阅读与问答：会话侧栏 + 弹出式添加引用 + 只引用 clean
 ```
 
-前端只保存当前选择、筛选器和待导入队列；所有会影响资料的操作都通过 Rust API 完成。文件选择器通过 `POST /api/import-upload` 接收 multipart 文件，服务端先在当前 Vault 的临时目录安全落盘，再委托同一个 core 文件夹导入器写入 `sources/`，处理完即清理临时目录；浏览器上传因此始终是“复制素材”，需要 `--no-copy` 外部引用时仍使用路径导入。文件浏览通过 `/api/files?view=essential|all` 获得清单，在浏览器端构建可折叠文件树，通过 `/api/file`（文本）或 `/api/file/raw`（图片/PDF）预览；Markdown/TXT 预览可直接编辑并经 `POST /api/file` 保存，raw、sources 和审计目录保持只读，保存后自动重建索引。外部引用源也会以虚拟文件显示，因此 `--no-copy` 不会让用户失去可见性。来源与 API 页面通过 `/api/providers` 读取内置和本机自定义 profile；`api_key` 只接受写入，响应只返回 `key_present`。默认的 `providers.json` 位于 Windows `%LOCALAPPDATA%/ReadTrace`，由 `READTRACE_PROVIDER_STORE` 覆盖；受限进程写不了用户目录时回退到当前 Vault 的 `.readtrace/providers.json`，两者都被 Git 忽略。repair、answer 和 provider check 都使用同一个 `profile_id → ResolvedLlm` 解析路径，兼容旧客户端把 profile id 填进 `provider` 的请求，避免出现 `unknown LLM provider tsinghua-glm-5.2`。后台通过 `/api/activity` 合并持久化事件与当前任务：OCR/repair 的服务任务在成功、部分失败或失败时追加终态事件，任务卡片区分 `completed_with_errors` 与 `failed`；终端式事件区把历史启动/进度作为信息记录，实际运行状态以任务卡片为准。批次阶段同时写入 `raw/<batch>/batch.json` 和 `metadata.json`，所以刷新或重启后处理页仍能恢复“已完成/部分失败”等状态。后台同时显示 Token、USD/CNY 费用和未返回 usage 的调用数。删除仍遵循“先计划、后确认”，合并仍以 `MergeUnit` 为最小单位。
+前端只保存当前选择、筛选器和待导入队列；所有会影响资料的操作都通过 Rust API 完成。文件选择器通过 `POST /api/import-upload` 接收 multipart 文件，服务端先在当前 Vault 的临时目录安全落盘，再委托同一个 core 文件夹导入器写入 `sources/`，处理完即清理临时目录；浏览器上传因此始终是“复制素材”，需要 `--no-copy` 外部引用时仍使用路径导入。文件浏览通过 `/api/files?view=essential|all` 获得清单，在浏览器端构建可折叠文件树，通过 `/api/file`（文本）或 `/api/file/raw`（图片/PDF）预览；Markdown/TXT 预览可直接编辑并经 `POST /api/file` 保存，raw、sources 和审计目录保持只读，保存后自动重建索引。外部引用源也会以虚拟文件显示，因此 `--no-copy` 不会让用户失去可见性。来源与 API 页面通过 `/api/providers` 读取内置和本机自定义 profile；`api_key` 只接受写入，响应只返回 `key_present`。默认的 `providers.json` 位于 Windows `%LOCALAPPDATA%/ReadTrace` 或 macOS `~/Library/Application Support/ReadTrace`，由 `READTRACE_PROVIDER_STORE` 覆盖；受限进程写不了用户目录时回退到当前 Vault 的 `.readtrace/providers.json`，这些位置都不会进入 Git。repair、answer 和 provider check 都使用同一个 `profile_id → ResolvedLlm` 解析路径，兼容旧客户端把 profile id 填进 `provider` 的请求，避免出现 `unknown LLM provider tsinghua-glm-5.2`。后台通过 `/api/activity` 合并持久化事件与当前任务：OCR/repair 的服务任务在成功、部分失败或失败时追加终态事件，任务卡片区分 `completed_with_errors` 与 `failed`；终端式事件区把历史启动/进度作为信息记录，实际运行状态以任务卡片为准。批次阶段同时写入 `raw/<batch>/batch.json` 和 `metadata.json`，所以刷新或重启后处理页仍能恢复“已完成/部分失败”等状态。后台同时显示 Token、USD/CNY 费用和未返回 usage 的调用数。删除仍遵循“先计划、后确认”，合并仍以 `MergeUnit` 为最小单位。
 
 ## 3. 关键结构
 
 Vault 的持久化目录仍按职责分开：`sources/` 保存原素材快照，`raw/` 保存 batch/OCR，`generated/` 保存规范化、repair、revision；每次 build 或确认 merge 会将最终 Markdown 投影到 `clean/<name>/document.md`，这个目录是人工编辑、检索和引用的唯一内容边界。跨 batch 的计划和结果位于 `generated/merges/<merge_id>/`。`runtime/` 保存调用台账，`.readtrace/state.db` 是可重建的 SQLite 投影。
 
-文件浏览会把 `clean/` 作为内容文件的一等目录展示；切换筛选或 Vault 时会自动展开其路径，当前 Vault 尚未生成 clean 时会显示可操作的提示。阅读室的模型选择默认是 `GLM-5.2`，推理挡位默认 `None`，模型下拉框只显示简洁名称。
+文件浏览会把 `clean/` 作为内容文件的一等目录展示；切换筛选或 Vault 时会自动展开其路径，当前 Vault 尚未生成 clean 时会显示可操作的提示。导入、处理、来源配置和阅读室统一使用 `None/Low/Mid/High` 推理强度。模型下拉框同时显示名称、`内置/自定义` 与 Key 状态，并在首次加载时优先选择已配置 Key 的自定义 GLM-5.2，避免同名内置来源误用未配置的环境变量 Key。
 
 | 结构 | 作用 |
 | --- | --- |
@@ -101,7 +101,7 @@ Vault 的持久化目录仍按职责分开：`sources/` 保存原素材快照，
 
 `LlmProvider::repair_page` 和 `answer` 是唯一上层接口。HTTP 实现使用 OpenAI-compatible Chat Completions，读取 `usage`、`id`、自定义认证头、`max_tokens` 字段和推理参数；因此清华网关、GLM、DeepSeek、Ollama 及其它兼容服务都只需改 `.env`。GLM-5.3/5.3-Flash 的网关规定必须思考，适配器发送 `thinking:{"type":"enabled"}` 与 `reasoning_effort=low|high|max`，把 `none`/`medium` 映射到最低 `low`；GLM-5.2 等模型则可发送 `thinking:{"type":"disabled"}` 真正关闭思考。HTTP 错误也保留不含密钥的响应预览，便于发现这类模型协议差异。Codex 实现调用本机 `codex exec --ephemeral --sandbox read-only --json`：最终文本来自 `--output-last-message`，Token 来自 `turn.completed.usage`，线程 ID 记录为 request id；模型名和 thinking 可通过 preset/参数设置，项目 Key 不会传入 Codex。可执行文件由 `READTRACE_CODEX_BIN` 控制，适配器会解析 Windows 的 `.exe`、`.cmd`、`.bat` 和 `.ps1` 入口，并在 PATH 不完整时尝试本地 Codex 安装目录；GUI 本身不等于 CLI。受限的 Codex 内置终端可能禁止 CLI 写入 `CODEX_HOME`，从而在网络请求前报 `os error 5`；这属于宿主权限/证书环境限制，不应由适配器绕过，也不应复制登录态文件。适配器会把只读数据库、拒绝访问和 CA 证书错误转换成可行动的提示，建议切换到普通 PowerShell/Windows Terminal。
 
-OCR 也不依赖当前 shell 的 PATH：CLI 首先加载项目 `.env` 中的 `READTRACE_TESSERACT_BIN`、`READTRACE_PDFTOPPM_BIN`、可选的 `READTRACE_PDFINFO_BIN`、`READTRACE_OCR_DPI`、`READTRACE_OCR_CONCURRENCY` 和 `TESSDATA_PREFIX`；未配置时再查找项目内工具目录、Windows 常见安装位置和 PATH。`ocr-check` 给出实际解析路径和可执行状态。
+OCR 也不依赖当前 shell 的 PATH：CLI 首先加载项目 `.env` 中的 `READTRACE_TESSERACT_BIN`、`READTRACE_PDFTOPPM_BIN`、可选的 `READTRACE_PDFINFO_BIN`、`READTRACE_OCR_DPI`、`READTRACE_OCR_CONCURRENCY` 和 `TESSDATA_PREFIX`；未配置时再查找项目内工具目录、Homebrew 常见路径、Windows 常见安装位置和 PATH。`ocr-check` 给出实际解析路径和可执行状态。
 
 修复 prompt 强制 JSON `{"repaired_text":"..."}`，禁止分析、confidence、patch 和引用框。若 JSON 不合约，或输出疑似删掉段落/页面尾部，当前页标记失败并保留 OCR，不把模型解释文字写进正文。
 
@@ -133,7 +133,7 @@ USD = uncached / 1,000,000 × input_price
 CNY = USD × usd_to_cny
 ```
 
-当前内置的模型价格（USD/百万 Token）来自已记录的官方价格表；Codex preset、OpenAI-compatible HTTP 和 GLM 5.3 Flash 都会按模型自动套用，未知自定义模型继续使用 `.env` 中的三项 `READTRACE_*_PRICE`：
+当前内置的模型价格（USD/百万 Token）来自已记录的官方价格表；Codex preset、OpenAI-compatible HTTP、GLM‑5.2 和 GLM‑5.3 Flash 都会按模型自动套用，未知自定义模型继续使用 `.env` 中的三项 `READTRACE_*_PRICE`：
 
 | 模型 | input | cached input | output |
 | --- | ---: | ---: | ---: |
@@ -148,14 +148,15 @@ CNY = USD × usd_to_cny
 | GPT-5 | 1.25 | 0.125 | 10.00 |
 | GPT-4o Mini | 0.15 | 0.075 | 0.60 |
 | GLM 5.3 Flash | 0.15 | 0.03 | 0.50 |
+| GLM 5.2 | 1.40 | 0.26 | 4.40 |
 
-价格依据：[GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna)、[GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra)、[GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol)、[GPT-5.4](https://developers.openai.com/api/docs/models/gpt-5.4)、[GPT-5.5](https://developers.openai.com/api/docs/models/gpt-5.5)。页面或模型版本变化时，应更新 `official_model_pricing` 的版本号，并保留旧账本中的快照。
+价格依据：[GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna)、[GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra)、[GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol)、[GPT-5.4](https://developers.openai.com/api/docs/models/gpt-5.4)、[GPT-5.5](https://developers.openai.com/api/docs/models/gpt-5.5) 和 [Z.ai 官方价格页](https://docs.z.ai/guides/overview/pricing)。页面或模型版本变化时，应更新 `official_model_pricing` 的版本号，并保留旧账本中的快照。
 
 ## 7. 当前完成度与待办
 
-截至 2026-09-02，核心后端和工作台 GUI 已达到可演示状态：core 66 项、server 8 项测试通过（Workspace 共 74 项），真实 Tesseract 路径可由 `.env` 解析，PDF 页级进度与有界并行 OCR、整页 repair、引用问答、session、同 batch 合并、跨 batch unit 合并、确认式删除、任务查询/取消、Workspace/Vault 创建与切换、文件浏览/预览、Markdown 编辑保存、Provider profile 管理和 revision 查看均已落地。生成结果会自动投影到 `clean/<name>/document.md`，检索与引用只读 clean。CLI 现在默认输出结构化人类摘要，脚本可用 `--format json` 取得完整 JSON。
+截至 2026-09-02，核心后端和工作台 GUI 已达到可演示状态：core 68 项、server 9 项测试通过（Workspace 共 77 项），真实 Tesseract 路径可由 `.env` 解析，PDF 页级进度与有界并行 OCR、整页 repair、引用问答、session、同 batch 合并、跨 batch unit 合并、确认式删除、任务查询/取消、Workspace/Vault 创建与切换、文件浏览/预览、Markdown 编辑保存、Provider profile 管理和 revision 查看均已落地。生成结果会自动投影到 `clean/<name>/document.md`，检索与引用只读 clean。CLI 现在默认输出结构化人类摘要，脚本可用 `--format json` 取得完整 JSON。
 
-本轮审计已执行 `cargo fmt --all -- --check`、`cargo test --workspace`、`cargo clippy --workspace --all-targets -- -D warnings`；三项均通过，Workspace 共 74 项测试通过（core 66、server 8）。另用现有 25 页 PDF 完成真实 OCR，当前实现耗时约 29.6 秒（旧的整批栅格化实现约 58.7 秒）；事件记录了 `0/25` 栅格化、逐页 `n/25` 和最终 `25/25`，默认并行度为 4。Chrome 验证了独立检索页、可读上下文、clean 文件树多选与即时文件名筛选、Mock 连续会话、推理挡位、Markdown 编辑保存和旧 profile id 兼容，控制台无错误。GLM-5.3-Flash 真实探针验证 `none→reasoning_effort=low`，GLM-5.2 真实探针验证 `thinking.type=disabled`，两者均返回标准 usage。视觉来源未修复时的引用、严格 build、旧 apply 和跨 batch merge 均有拒绝测试；`allow_unrepaired` 应急路径明确留下 warning，修复任务会区分部分成功与全失败，并拒绝疑似删段的整页输出。
+本轮审计已执行 `cargo fmt --all -- --check`、`cargo test --workspace`、`cargo clippy --workspace --all-targets -- -D warnings`；三项均通过，Workspace 共 77 项测试通过（core 68、server 9）。新增覆盖 GLM‑5.2 官方价格和宿主无关的 Windows 盘符/UNC 上传路径拒绝。另用现有 25 页 PDF 完成真实 OCR，当前实现耗时约 29.6 秒（旧的整批栅格化实现约 58.7 秒）；事件记录了 `0/25` 栅格化、逐页 `n/25` 和最终 `25/25`，默认并行度为 4。Chrome 验证了独立检索页、可读上下文、clean 文件树多选与即时文件名筛选、Mock 连续会话、推理强度、Markdown 编辑保存和旧 profile id 兼容，控制台无错误。GLM-5.3-Flash 真实探针验证 `none→reasoning_effort=low`，GLM-5.2 真实探针验证 `thinking.type=disabled`，两者均返回标准 usage。视觉来源未修复时的引用、严格 build、旧 apply 和跨 batch merge 均有拒绝测试；`allow_unrepaired` 应急路径明确留下 warning，修复任务会区分部分成功与全失败，并拒绝疑似删段的整页输出。
 
 ### P0：课程交付前必须完成
 

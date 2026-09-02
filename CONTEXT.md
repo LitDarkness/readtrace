@@ -32,7 +32,7 @@ ReadTrace 是按 Workspace 管理多个独立 Vault 的 OCR 整理工具。支�
 
 **Citation text**：问答允许使用的最终证据。图片/PDF 只引用完整 repair 结果；原始 txt/md 和 clean Markdown 可直接引用，因为它们本身就是可读文本。raw OCR 和仅规范化的视觉 OCR 不进入引用上下文。
 
-**Speed profile**：用户对 reasoning effort 的统一挡位。Low 追求速度，Mid（medium）平衡，High 追求复杂上下文质量；它不改变模型名称。
+**推理强度**：用户对 reasoning effort 的统一控制。界面显示 None、Low、Mid（协议值 `medium`）、High；它不改变模型名称。历史 `speed` 字段和 CLI `--speed` 仅作为兼容入口保留。
 
 **Deletion plan**：`delete-batch` 或 `delete-unit` 生成的破坏性操作预览。只有显式 `--confirm` 才执行；运行台账和事件流保留，索引随后重建。
 

@@ -25,6 +25,6 @@ Set-Location E:\AI_diary\summer_project
 
 输入分流：`.txt`/`.md` 直接读取，`.pdf` 和图片走 OCR，其它格式跳过；文件夹递归解析并记录 skipped。规范化 JSON 仅供人工审计/调整，视觉来源仍必须完成整页 repair 才能 build、merge 或引用；repair 默认复用未变化页，`--refresh` 才重跑。
 
-多页 repair 默认最多并行 4 个请求，可通过 `.env` 的 `READTRACE_LLM_CONCURRENCY=1..64` 调整；页序和 checkpoint 不受并行完成顺序影响。已知 OpenAI/Codex 模型和 GLM 5.3 Flash 按记录的 input/cached/output 价格计算，其它学校网关模型需要手工设置价格。
+多页 repair 默认最多并行 4 个请求，可通过 `.env` 的 `READTRACE_LLM_CONCURRENCY=1..64` 调整；页序和 checkpoint 不受并行完成顺序影响。已知 OpenAI/Codex 模型、GLM‑5.2 和 GLM‑5.3 Flash 按记录的 input/cached/output 价格计算；学校网关采用独立价格时需要手工覆盖。
 
 测试图片的 Codex Luna High 运行样例保存在 `tmp/luna-high-full-20260829-225721/`；本次 Low/Mid/High 独立基准保存在 `tmp/png-speed-20260829-234232/`（运行产物，不是固定数据集）。旧运行产物中的 Codex usage 仍是 unknown；修复适配器后重新运行会记录 JSONL usage 和 request id。

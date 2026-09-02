@@ -452,6 +452,8 @@ fn official_model_pricing(model: &str) -> Option<OfficialModelPricing> {
         || model.starts_with("glm-5.3-flash-")
     {
         (0.15, 0.03, 0.50, "zai-model-pricing-2026-08-31")
+    } else if model == "glm-5.2" || model.starts_with("glm-5.2-") {
+        (1.40, 0.26, 4.40, "zai-model-pricing-2026-09-02")
     } else if model == "gpt-5.6" || model == "gpt-5.6-sol" || model.starts_with("gpt-5.6-sol-") {
         (4.0, 0.40, 20.0, "openai-model-pricing-2026-08-31")
     } else if model == "gpt-5.6-terra" || model.starts_with("gpt-5.6-terra-") {
@@ -1252,7 +1254,10 @@ impl ProjectStore {
             root: root.as_ref().to_path_buf(),
         };
         if !s.root.join("metadata.json").exists() {
-            return Err(anyhow!("not a ReadTrace project; run init first"));
+            return Err(anyhow!(
+                "not a ReadTrace project: {}; run `readtrace-cli init <PROJECT>` with an explicit path first",
+                s.root.display()
+            ));
         }
         Ok(s)
     }
@@ -3020,9 +3025,9 @@ impl ProjectStore {
                     .and_then(|s| s.to_str())
                     .map(sanitize_filename)
                     .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| format!("doc-{}", &batch.batch_id))
+                    .unwrap_or_else(|| format!("doc-{}", batch.batch_id))
             })
-            .unwrap_or_else(|| format!("doc-{}", &batch.batch_id));
+            .unwrap_or_else(|| format!("doc-{}", batch.batch_id));
         let base = self.path(format!(
             "generated/{}/{}/revisions",
             batch.batch_id, document_id
@@ -3343,9 +3348,9 @@ impl ProjectStore {
                     .and_then(|s| s.to_str())
                     .map(sanitize_filename)
                     .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| format!("doc-{}", &batch.batch_id))
+                    .unwrap_or_else(|| format!("doc-{}", batch.batch_id))
             })
-            .unwrap_or_else(|| format!("doc-{}", &batch.batch_id));
+            .unwrap_or_else(|| format!("doc-{}", batch.batch_id));
         let out_dir = self.path(format!("generated/{}/{}", batch.batch_id, document_id));
         fs::create_dir_all(&out_dir)?;
         let out = out_dir.join("document.md");
@@ -4575,6 +4580,10 @@ impl TesseractOcrProvider {
                 "READTRACE_TESSERACT_BIN",
                 "tesseract",
                 &[
+                    "tools/tesseract/tesseract",
+                    "tmp/tesseract/tesseract",
+                    "/opt/homebrew/bin/tesseract",
+                    "/usr/local/bin/tesseract",
                     "tools/tesseract/tesseract.exe",
                     "tmp/tesseract/tesseract.exe",
                     "C:/Program Files/Tesseract-OCR/tesseract.exe",
@@ -4585,6 +4594,10 @@ impl TesseractOcrProvider {
                 "READTRACE_PDFTOPPM_BIN",
                 "pdftoppm",
                 &[
+                    "tools/poppler/pdftoppm",
+                    "tmp/poppler/pdftoppm",
+                    "/opt/homebrew/bin/pdftoppm",
+                    "/usr/local/bin/pdftoppm",
                     "tools/poppler/pdftoppm.exe",
                     "tmp/poppler/Library/bin/pdftoppm.exe",
                     "C:/Program Files/poppler/Library/bin/pdftoppm.exe",
@@ -4610,6 +4623,10 @@ fn resolve_pdfinfo_binary() -> String {
         "READTRACE_PDFTOPPM_BIN",
         "pdftoppm",
         &[
+            "tools/poppler/pdftoppm",
+            "tmp/poppler/pdftoppm",
+            "/opt/homebrew/bin/pdftoppm",
+            "/usr/local/bin/pdftoppm",
             "tools/poppler/pdftoppm.exe",
             "tmp/poppler/Library/bin/pdftoppm.exe",
             "C:/Program Files/poppler/Library/bin/pdftoppm.exe",
@@ -4627,6 +4644,10 @@ fn resolve_pdfinfo_binary() -> String {
             "READTRACE_PDFINFO_BIN",
             "pdfinfo",
             &[
+                "tools/poppler/pdfinfo",
+                "tmp/poppler/pdfinfo",
+                "/opt/homebrew/bin/pdfinfo",
+                "/usr/local/bin/pdfinfo",
                 "tools/poppler/pdfinfo.exe",
                 "tmp/poppler/Library/bin/pdfinfo.exe",
                 "C:/Program Files/poppler/Library/bin/pdfinfo.exe",
@@ -5608,7 +5629,10 @@ fn find_command_on_path(value: &str) -> Option<PathBuf> {
 /// executable to the environment inherited by this process. This is a
 /// fallback only: an explicit `READTRACE_CODEX_BIN` or PATH entry always wins.
 fn local_codex_candidates() -> Vec<PathBuf> {
+    #[cfg(windows)]
     let mut candidates = Vec::new();
+    #[cfg(not(windows))]
+    let candidates = Vec::new();
     #[cfg(windows)]
     {
         if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
@@ -6608,6 +6632,19 @@ mod tests {
         assert_eq!(config.cached_input_price_per_million, 0.03);
         assert_eq!(config.output_price_per_million, 0.50);
         assert_eq!(config.pricing_version, "zai-model-pricing-2026-08-31");
+    }
+
+    #[test]
+    fn glm_5_2_uses_zai_official_price() {
+        let mut config = AppConfig {
+            model: "glm-5.2".into(),
+            ..Default::default()
+        };
+        assert!(config.apply_official_model_pricing());
+        assert_eq!(config.input_price_per_million, 1.40);
+        assert_eq!(config.cached_input_price_per_million, 0.26);
+        assert_eq!(config.output_price_per_million, 4.40);
+        assert_eq!(config.pricing_version, "zai-model-pricing-2026-09-02");
     }
 
     #[test]

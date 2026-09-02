@@ -1,6 +1,15 @@
 # ReadTrace CLI 操作手册
 
-本文中的命令都在 `E:\AI_diary\summer_project` 执行。CLI 启动时会读取当前目录的 `.env`，所以 OCR 路径和 Provider 配置不需要每次手工设置。
+本文中的命令都从项目根目录执行。CLI 启动时读取当前目录的 `.env`，所以 OCR 路径和 Provider 配置不需要每次手工设置。示例主体沿用已经在 Windows 验证过的 PowerShell 变量语法；macOS zsh/bash 对照如下，CLI 子命令和参数不变：
+
+| 操作 | Windows PowerShell | macOS zsh/bash |
+| --- | --- | --- |
+| 当前目录 | `$project = (Get-Location).Path` | `project="$(pwd)"` |
+| 拼接目录 | `Join-Path $project "workspace"` | `"$project/workspace"` |
+| 续行 | 行尾反引号 `` ` `` | 行尾反斜杠 `\` |
+| 当前目录相对路径 | `.\workspace` | `./workspace` |
+
+双平台依赖安装、`.env` 和迁移步骤见 [`GITHUB_AND_DEVICE_SETUP.md`](GITHUB_AND_DEVICE_SETUP.md)。
 
 CLI 默认输出适合人阅读的摘要；脚本需要完整 JSON 时，在命令前或后加 `--format json`。例如 `ls $workspace` 会输出 Vault 列表，`ls $workspace --format json` 保留完整原始结构；所有 JSON 命令都遵循这条规则。
 
@@ -10,11 +19,11 @@ CLI 默认输出适合人阅读的摘要；脚本需要完整 JSON 时，在命�
 
 | 名称 | 示例 | 作用 |
 | --- | --- | --- |
-| 项目根目录 | `E:\AI_diary\summer_project` | Rust workspace，运行 `cargo` |
-| Workspace | `E:\AI_diary\summer_project\workspace` | 登记多个 Vault，包含 `workspace.json` |
-| Vault | `E:\AI_diary\summer_project\workspace\vaults\first_run` | 保存 source、raw、generated、sessions、runtime |
-| 外部输入 | `E:\AI_diary\tests\1.png`、`E:\AI_diary\tests`、`D:\captures\chapter-03` | 待导入的文件或文件夹，不是 Vault |
-| 临时测试目录 | `E:\AI_diary\summer_project\tmp\...` | 测试产物；可纳入运行时费用扫描 |
+| 项目根目录 | Windows `E:\readtrace`；macOS `/Users/me/readtrace` | Rust workspace，运行 `cargo` |
+| Workspace | `<项目>/workspace` | 登记多个 Vault，包含 `workspace.json` |
+| Vault | `<项目>/workspace/vaults/first_run` | 保存 source、raw、generated、sessions、runtime |
+| 外部输入 | 任意本机图片、PDF、TXT/MD 文件或目录 | 待导入的文件或文件夹，不是 Vault |
+| 临时测试目录 | `<项目>/tmp/...` | 测试产物；可纳入运行时费用扫描 |
 
 `.\vault` 只表示“当前目录下的 vault”。为了避免混淆，建议脚本统一使用绝对路径：
 
@@ -22,6 +31,14 @@ CLI 默认输出适合人阅读的摘要；脚本需要完整 JSON 时，在命�
 Set-Location E:\AI_diary\summer_project
 $workspace = "E:\AI_diary\summer_project\workspace"
 $vault = "E:\AI_diary\summer_project\workspace\vaults\first_run"
+```
+
+macOS 对应写法：
+
+```bash
+cd /Users/me/readtrace
+workspace="$(pwd)/workspace"
+vault="$workspace/vaults/first_run"
 ```
 
 Workspace 不能直接传给 `ocr`、`repair`、`answer`；先用 `vault-path`，或直接使用 Vault 的绝对路径。
@@ -57,17 +74,17 @@ cargo run --quiet -p readtrace-cli -- sources $vault --batch-id <batch_id>
 项目使用 `.env` 保存 OCR 程序路径，CLI 会自动读取：
 
 ```dotenv
-READTRACE_TESSERACT_BIN=E:/tools/tesseract/tesseract.exe
-READTRACE_PDFTOPPM_BIN=E:/tools/poppler/Library/bin/pdftoppm.exe
-# 可选：与 pdftoppm 同目录的 pdfinfo；不填则自动寻找
-READTRACE_PDFINFO_BIN=E:/tools/poppler/Library/bin/pdfinfo.exe
-TESSDATA_PREFIX=E:/tools/tesseract/tessdata
+# Windows 示例；必须换成实际安装位置
+READTRACE_TESSERACT_BIN=C:/Program Files/Tesseract-OCR/tesseract.exe
+READTRACE_PDFTOPPM_BIN=C:/tools/poppler/Library/bin/pdftoppm.exe
+READTRACE_PDFINFO_BIN=C:/tools/poppler/Library/bin/pdfinfo.exe
+TESSDATA_PREFIX=C:/Program Files/Tesseract-OCR/tessdata
 READTRACE_OCR_LANGUAGES=chi_sim+eng
 READTRACE_OCR_DPI=200
 READTRACE_OCR_CONCURRENCY=4
 ```
 
-如果没有设置绝对路径，程序会依次尝试项目内的 `tools/tesseract`、`tmp/tesseract` 和 Windows 常见安装位置，最后才回退到 PATH 中的 `tesseract`/`pdftoppm`。
+macOS Apple Silicon 使用 `/opt/homebrew/bin/tesseract`、`/opt/homebrew/bin/pdftoppm`、`/opt/homebrew/bin/pdfinfo`；Intel Homebrew 使用 `/usr/local/bin/...`。macOS 通常不需要 `TESSDATA_PREFIX`。如果没有设置绝对路径，程序会依次尝试项目内工具、Homebrew 常见路径、Windows 常见安装位置，最后回退到 `PATH` 中的命令名。
 
 先检查当前环境：
 
@@ -79,7 +96,7 @@ cargo run --quiet -p readtrace-cli -- ocr-check
 
 PDF 不再把一个文件当成一个不可解释的 `0/1`：任务会先显示例如 `0/25 · rendering PDF (25 pages)`，随后显示页级栅格化和识别进度 `n/25 · rendered PDF page p/25`、`n/25 · OCR page p/25`，最后显示 `25/25 · OCR complete (25 pages)`。并行处理时页完成顺序可能交错，但 `raw` page number 和后续文档顺序仍按 PDF 原页序保存。
 
-## 3. Provider 和速度挡位
+## 3. Provider 和推理强度
 
 ```powershell
 cargo run --quiet -p readtrace-cli -- provider-check
@@ -115,12 +132,12 @@ cargo run --quiet -p readtrace-cli -- ai-check --provider http --model glm-5.2 -
 
 repair 对不同页面默认并行调用，`.env` 中的 `READTRACE_LLM_CONCURRENCY` 控制同时在途的页数，默认是 `4`，允许 `1..64`。它只限制 LLM 请求，不改变导入顺序、checkpoint 文件名或最终文档顺序；网络不稳定时可以先调成 `1` 排查问题。
 
-已知 OpenAI 模型和 `glm-5.3-flash` 会按价格表自动填入 input/cached-input/output 三档单价；Codex preset 会直接启用这项规则。清华网关上的其它模型和自定义来源不由程序猜测，需在 `.env` 明确填写：
+已知 OpenAI 模型、`glm-5.2` 和 `glm-5.3-flash` 会按价格表自动填入 input/cached-input/output 三档单价；Codex preset 会直接启用这项规则。GLM‑5.2 在 2026-09-02 的 [Z.ai 官方价格](https://docs.z.ai/guides/overview/pricing)为 `$1.40/$0.26/$4.40`（每百万 Token），程序记录版本 `zai-model-pricing-2026-09-02`。清华/学校网关若采用不同结算价，需在 `.env` 明确填写三项真实价格：
 
 ```dotenv
-READTRACE_INPUT_PRICE=0       # glm-5.3-flash 可留 0，程序会套用 0.15
-READTRACE_CACHED_INPUT_PRICE=0 # glm-5.3-flash 可留 0，程序会套用 0.03
-READTRACE_OUTPUT_PRICE=0      # glm-5.3-flash 可留 0，程序会套用 0.50
+READTRACE_INPUT_PRICE=0        # 已知模型留 0 即使用内置价格
+READTRACE_CACHED_INPUT_PRICE=0 # 学校另有价格时填写实际值
+READTRACE_OUTPUT_PRICE=0       # 三项应一起配置
 READTRACE_PRICING_VERSION=school-unknown
 READTRACE_USD_TO_CNY=6.8
 ```

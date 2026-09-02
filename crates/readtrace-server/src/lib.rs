@@ -356,7 +356,7 @@ impl TaskRegistry {
             .values()
             .map(|entry| entry.snapshot.clone())
             .collect::<Vec<_>>();
-        list.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        list.sort_by_key(|item| std::cmp::Reverse(item.updated_at));
         list
     }
 }
@@ -526,8 +526,15 @@ pub async fn run(project: PathBuf, bind: &str) -> Result<()> {
             ProjectStore::open(workspace.vault_path(&first.vault_id)?)?,
             Some(workspace),
         )
-    } else {
+    } else if project.join("metadata.json").is_file() {
         (ProjectStore::open(&project)?, None)
+    } else {
+        return Err(anyhow::anyhow!(
+            "{} is neither a ReadTrace Workspace nor a Vault. For the Web workspace, run:\n  cargo run --quiet -p readtrace-cli -- workspace-init \"{}\"\n  cargo run --quiet -p readtrace-cli -- vault-create \"{}\" default\nThen retry serve.",
+            project.display(),
+            project.display(),
+            project.display()
+        ));
     };
     let state = AppState {
         project: Arc::new(RwLock::new(Arc::new(project))),
@@ -781,7 +788,7 @@ fn builtin_provider_profiles() -> Vec<ProviderProfile> {
     vec![
         school(
             "tsinghua-glm-5.3-flash",
-            "清华 GLM-5.3 Flash（最快）",
+            "清华 GLM-5.3 Flash（始终启用推理）",
             "glm-5.3-flash",
         ),
         school("tsinghua-glm-5.2", "清华 GLM-5.2（可关闭思考）", "glm-5.2"),
@@ -836,11 +843,23 @@ fn provider_store_path(project: &ProjectStore) -> PathBuf {
             return PathBuf::from(path);
         }
     }
+    #[cfg(test)]
+    return project.root.join(".readtrace").join("providers.json");
+    #[cfg(all(not(test), windows))]
     if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
         return PathBuf::from(local_app_data)
             .join("ReadTrace")
             .join("providers.json");
     }
+    #[cfg(all(not(test), target_os = "macos"))]
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+            .join("ReadTrace")
+            .join("providers.json");
+    }
+    #[cfg(not(test))]
     project.root.join(".readtrace").join("providers.json")
 }
 
@@ -1956,7 +1975,13 @@ async fn direct_clean(
 fn safe_upload_relative_path(raw: &str) -> Result<PathBuf> {
     let normalized = raw.replace('\\', "/");
     let path = std::path::Path::new(&normalized);
-    if normalized.trim().is_empty() || path.is_absolute() {
+    let bytes = normalized.as_bytes();
+    let has_windows_drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    if normalized.trim().is_empty()
+        || path.is_absolute()
+        || has_windows_drive
+        || normalized.starts_with("//")
+    {
         return Err(anyhow!("上传文件名必须是相对路径"));
     }
     let mut safe = PathBuf::new();
@@ -2485,7 +2510,7 @@ async fn sessions(State(state): State<AppState>) -> Json<serde_json::Value> {
             }
         }
     }
-    items.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    items.sort_by_key(|item| std::cmp::Reverse(item.updated_at));
     Json(serde_json::json!({"ok": true, "sessions": items}))
 }
 
@@ -2672,6 +2697,9 @@ mod tests {
         );
         assert!(safe_upload_relative_path("../outside.txt").is_err());
         assert!(safe_upload_relative_path("C:/outside.txt").is_err());
+        assert!(safe_upload_relative_path("C:outside.txt").is_err());
+        assert!(safe_upload_relative_path("/tmp/outside.txt").is_err());
+        assert!(safe_upload_relative_path(r"\\server\share\outside.txt").is_err());
     }
 
     #[tokio::test]

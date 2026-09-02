@@ -715,7 +715,7 @@ async fn main() -> Result<()> {
                         }
                     }
                 }
-                batches.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                batches.sort_by_key(|batch| std::cmp::Reverse(batch.created_at));
                 emit_ls(
                     serde_json::to_value(serde_json::json!({
                         "type": "vault",

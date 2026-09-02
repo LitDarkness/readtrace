@@ -1,6 +1,6 @@
 # ReadTrace 完整流程教程
 
-这份教程从空 Workspace 开始，完成三种输入：一个 PDF、一个 Markdown 文件和两张图片。命令都从项目根目录运行，也就是：
+这份教程从空 Workspace 开始，完成三种输入：一个 PDF、一个 Markdown 文件和两张图片。正文保留已在 Windows 验证的 PowerShell 记录。macOS 先按 [`GITHUB_AND_DEVICE_SETUP.md`](GITHUB_AND_DEVICE_SETUP.md) 安装依赖，再将 Windows 路径换成正斜杠路径、PowerShell 反引号换成 shell 反斜杠；所有 ReadTrace CLI 参数保持不变。命令都从项目根目录运行，也就是：
 
 ```powershell
 Set-Location E:\AI_diary\summer_project
@@ -258,7 +258,7 @@ cargo run --quiet -p readtrace-cli -- serve .\workspace\tutorial-demo --bind 127
 
 最后在“阅读与问答”页打开“添加引用”，从 clean 文件树多选 `clean/GUI/images/document.md` 和 `clean/GUI/markdown/document.md`，提问“这段剧情讲了什么？”。新建对话后页面显示“文件引用 2 个”，回答中带有两个引用块和来源锚点，统计显示 `Token 4,267 · $0.000000`；图片引用的内容来自真实 GLM 修复后的 `revision: 0002`。这验证了 GUI 的导入、清洗、修复、合并、clean 浏览、引用和问答链路是连通的；这次回答使用 Mock 只是为了让引用验证不受网络波动影响。
 
-另外，随后在同一处理页把单页 `story.md` 切换到真实 `GLM-5.2`、`Low` 速度，点击“开始修复”，GUI 显示 `LLM 修复 已完成 · 1/1`。账本记录该次调用的 `input_tokens=472`、`output_tokens=78`、`total_tokens=550` 和 `request_id`；当前没有为 GLM-5.2 配置价格表，因此费用保持未估算。两张 PNG 也用同一控件重跑了真实修复，GUI 显示 `2/2`，账本分别记录 1,167 和 1,136 个总 Token。此前失败的 502 请求也会明确显示失败，不会覆盖已有产物。
+另外，随后在同一处理页把单页 `story.md` 切换到真实 `GLM-5.2`、`Low` 速度，点击“开始修复”，GUI 显示 `LLM 修复 已完成 · 1/1`。账本记录该次调用的 `input_tokens=472`、`output_tokens=78`、`total_tokens=550` 和 `request_id`。当次验证发生时尚未内置 GLM‑5.2 价格，所以原始记录费用未估算；当前版本已加入 2026-09-02 官方价格 `$1.40/$0.26/$4.40`，读取账本或执行 `usage` 时可依据已有 usage 回填。两张 PNG 也用同一控件重跑了真实修复，GUI 显示 `2/2`，账本分别记录 1,167 和 1,136 个总 Token。此前失败的 502 请求也会明确显示失败，不会覆盖已有产物。
 
 ## 9. CLI 与本地实际验证记录（2026-09-02）
 

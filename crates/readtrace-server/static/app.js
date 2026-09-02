@@ -155,7 +155,7 @@ function prepareQueueCleanNameUi() {
       copy: uploadFiles?.length ? true : $('copy').checked,
       ocr: $('queueOcr').value,
       provider: $('queueProvider').value,
-      speed: $('queueSpeed').value,
+      thinking: $('queueSpeed').value,
       model: $('queueModel').value.trim(),
       cleanName: $('queueCleanName')?.value.trim() || '',
       merge: $('queueMerge').value,
@@ -169,7 +169,7 @@ function prepareQueueCleanNameUi() {
 }
 function go(view) { document.querySelectorAll('.nav-tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.view === view)); document.querySelectorAll('.view').forEach((section) => section.classList.toggle('active', section.id === `view-${view}`)); $('viewTitle').textContent = titles[view] || view; if (view === 'files') loadFiles(); if (view === 'backend') { loadTasks(); loadActivity(); } if (view === 'reader') loadUsage(); }
 function selectedBatch() { const batch = $('batch').value; if (!batch) { toast('先选择一个批次', true); return null; } return batch; }
-function llmBody(provider) { const batch = selectedBatch(); if (!batch) return null; const body = { batch_id: batch, provider, speed: $('speed').value }; if ($('model').value.trim()) body.model = $('model').value.trim(); return body; }
+function llmBody(provider) { const batch = selectedBatch(); if (!batch) return null; const body = { batch_id: batch, provider, thinking: $('speed').value }; if ($('model').value.trim()) body.model = $('model').value.trim(); return body; }
 function setBatchOptions(batches, preferred) { state.batches = batches || []; $('batchCount').textContent = state.batches.length; const select = $('batch'); const current = preferred || select.value; select.replaceChildren(); if (!state.batches.length) { select.add(new Option('暂无批次，请先导入', '')); return; } state.batches.forEach((batch) => select.add(new Option(`${batch.batch_id} · ${batch.status || 'imported'}`, batch.batch_id))); select.value = state.batches.some((batch) => batch.batch_id === current) ? current : state.batches[0].batch_id; updateBatchHint(); }
 function updateBatchHint() { const batch = state.batches.find((item) => item.batch_id === $('batch').value); $('batchHint').textContent = batch ? `${batch.source_files?.length || 0} 个来源 · ${batch.mode || 'generic'}` : ''; }
 async function loadWorkspace() { try { const [info, vaults] = await Promise.all([api('/api/vault'), api('/api/vaults')]); if (!info.ok || !vaults.ok) throw new Error(info.error || vaults.error || '无法读取 Workspace'); const workspace = vaults.workspace || info.workspace; $('workspaceName').textContent = workspace ? String(workspace).split(/[\\/]/).filter(Boolean).pop() : '单 Vault 模式'; $('root').textContent = info.root || vaults.selected || ''; $('currentVaultLabel').textContent = vaults.selected_vault?.name || '当前 Vault'; const list = $('vaultList'); list.replaceChildren(); (vaults.vaults || []).forEach((vault) => { const button = document.createElement('button'); button.className = `vault-item${vault.vault_id === vaults.selected_vault?.vault_id ? ' active' : ''}`; button.innerHTML = `<span class="vault-dot"></span><span>${escapeHtml(vault.name)}</span>`; button.onclick = async () => { const result = await post('/api/vaults/select', { name_or_id: vault.vault_id }); if (!result.ok) return toast(result.error, true); state.expandedDirs.clear(); state.currentFile = null; state.selectedUnits.clear(); state.pendingUnitMerge = null; state.filesRequestSeq += 1; toast(`已切换到 ${vault.name}`); await refresh(); }; list.append(button); }); } catch (error) { $('connectionStatus').textContent = '服务不可用'; toast(error.message, true); } }
@@ -230,19 +230,19 @@ function prepareReaderUi() {
     output.className = 'chat-history';
     output.setAttribute('aria-live', 'polite');
   }
-  const speed = $('answerSpeed');
-  if (speed) {
-    const label = speed.closest('label');
-    if (label?.firstChild?.nodeType === Node.TEXT_NODE) label.firstChild.textContent = '推理挡位';
-    speed.replaceChildren(
+  const thinkingSelect = $('answerSpeed');
+  if (thinkingSelect) {
+    const label = thinkingSelect.closest('label');
+    if (label?.firstChild?.nodeType === Node.TEXT_NODE) label.firstChild.textContent = '推理强度';
+    thinkingSelect.replaceChildren(
       new Option('None', 'none'),
       new Option('Low', 'low'),
       new Option('Mid', 'medium'),
       new Option('High', 'high'),
     );
-    speed.value = 'none';
-    speed.id = 'answerThinking';
-    speed.title = 'GLM 使用 thinking.type；Codex 使用对应速度挡位';
+    thinkingSelect.value = 'none';
+    thinkingSelect.id = 'answerThinking';
+    thinkingSelect.title = '发送给所选模型的推理强度';
   }
   const question = $('question');
   if (question) {
@@ -566,29 +566,36 @@ renderChat();
 state.providers = [];
 state.currentProvider = null;
 function providerById(id) { return state.providers.find((profile) => profile.id === id); }
+function providerReady(profile) {
+  return profile.enabled && (profile.kind !== 'http' || profile.key_present);
+}
 function defaultProvider() {
-  return state.providers.find((profile) => profile.enabled && profile.model === 'glm-5.2')
+  return state.providers.find((profile) => providerReady(profile) && !profile.builtin && profile.model === 'glm-5.2')
+    || state.providers.find((profile) => providerReady(profile) && profile.model === 'glm-5.2')
+    || state.providers.find((profile) => providerReady(profile) && !profile.builtin)
+    || state.providers.find(providerReady)
     || state.providers.find((profile) => profile.enabled)
     || null;
 }
 function providerShortName(profile) {
   if (!profile) return '—';
-  if (profile.id === 'codex-luna') return 'Codex Luna';
-  if (profile.id === 'mock') return 'Mock';
-  if (profile.model === 'glm-5.3-flash') return 'GLM-5.3 Flash';
-  if (profile.model === 'glm-5.2') return 'GLM-5.2';
-  return profile.model || profile.name;
+  const origin = profile.builtin ? '内置' : '自定义';
+  const keyState = profile.kind === 'http' ? ` · ${profile.key_present ? 'Key 已配置' : '未配置 Key'}` : '';
+  return `${profile.name} · ${origin}${keyState}`;
 }
-function renderProviderSelect(id) {
+function renderProviderSelect(id, preferredId) {
   const select = $(id);
   if (!select) return;
   const current = select.value;
+  const loaded = select.dataset.providersLoaded === 'true';
   select.replaceChildren();
   state.providers.filter((profile) => profile.enabled).forEach((profile) => {
     select.add(new Option(providerShortName(profile), profile.id));
   });
-  if (providerById(current)?.enabled) select.value = current;
+  const preferred = preferredId || (loaded ? current : '');
+  if (providerById(preferred)?.enabled) select.value = preferred;
   else if (defaultProvider()) select.value = defaultProvider().id;
+  select.dataset.providersLoaded = 'true';
 }
 function fillProviderForm(profile) {
   state.currentProvider = profile || null;
@@ -597,7 +604,8 @@ function fillProviderForm(profile) {
   $('providerName').value = profile?.name || '';
   $('providerKind').value = profile?.kind || 'http';
   $('providerModel').value = profile?.model || '';
-  $('providerThinking').value = profile?.thinking_mode || 'none';
+  const thinking = profile?.thinking_mode === 'mid' ? 'medium' : profile?.thinking_mode;
+  $('providerThinking').value = ['none', 'low', 'medium', 'high'].includes(thinking) ? thinking : 'none';
   $('providerBaseUrl').value = profile?.base_url || '';
   $('providerEndpoint').value = profile?.endpoint || '';
   $('providerEndpointPath').value = profile?.endpoint_path || 'chat/completions';
@@ -613,7 +621,13 @@ function fillProviderForm(profile) {
   $('providerPricingVersion').value = profile?.pricing_version || '';
   $('providerEnabled').checked = profile?.enabled ?? true;
   const badge = $('providerKeyBadge');
-  if (badge) badge.textContent = profile?.key_present ? 'KEY 已配置' : 'KEY 未配置';
+  if (badge) {
+    badge.textContent = profile?.kind === 'codex-cli'
+      ? '使用本机登录'
+      : profile?.kind === 'mock'
+        ? '无需 KEY'
+        : profile?.key_present ? 'KEY 已配置' : 'KEY 未配置';
+  }
   const clear = $('providerClearKey');
   if (clear) clear.checked = false;
   $('providerDelete').disabled = !profile || profile.builtin;
@@ -634,9 +648,10 @@ function renderProviderList() {
     const title = document.createElement('strong');
     title.textContent = profile.name;
     const details = document.createElement('span');
-    details.textContent = `${profile.kind} · ${profile.model}`;
+    details.textContent = `${profile.kind} · ${profile.model} · ${profile.id}`;
     const badges = document.createElement('small');
-    badges.textContent = `${profile.key_present ? 'Key 已配置' : '无 Key'}${profile.builtin ? ' · 内置' : ''}${profile.enabled ? '' : ' · 已停用'}`;
+    const credential = profile.kind === 'codex-cli' ? '本机登录' : profile.kind === 'mock' ? '无需 Key' : profile.key_present ? 'Key 已配置' : '未配置 Key';
+    badges.textContent = `${credential} · ${profile.builtin ? '内置' : '自定义'}${profile.enabled ? '' : ' · 已停用'}`;
     button.append(title, details, badges);
     button.onclick = () => { fillProviderForm(profile); renderProviderList(); };
     box.append(button);
@@ -648,7 +663,7 @@ async function loadProviders(selectId) {
   state.providers = result.profiles || [];
   if (selectId) state.currentProvider = providerById(selectId) || state.currentProvider;
   if (!state.currentProvider) state.currentProvider = defaultProvider();
-  ['provider', 'queueProvider', 'answerProvider'].forEach(renderProviderSelect);
+  ['provider', 'queueProvider', 'answerProvider'].forEach((id) => renderProviderSelect(id, selectId));
   renderProviderList();
   fillProviderForm(state.currentProvider);
   const hint = $('providerStoreHint');
@@ -746,7 +761,7 @@ async function runQueuedPipeline(batchId, item) {
     batch_id: batchId,
     profile_id: profile?.id || item.provider,
     provider: profile?.kind,
-    speed: item.speed,
+    thinking: item.thinking,
     ...(item.model ? { model: item.model } : {}),
   });
   if (!repair.ok) throw new Error(repair.error);
@@ -781,7 +796,7 @@ answer = async function profileAnswer() {
     });
     if (!result.ok) {
       state.chatMessages.push({ role: 'error', content: result.error || '问答失败' });
-      if (status) status.textContent = '本轮失败，可以修改来源或挡位后重试。';
+      if (status) status.textContent = '本轮失败，可以修改来源或推理强度后重试。';
       renderChat();
       return;
     }
@@ -806,6 +821,10 @@ prepareProviderUi();
 // Keep selectors compact and consistent across import, processing, provider
 // configuration, and chat. Values remain the protocol values used by the API.
 function normalizeSelectorLabels() {
+  const relabel = (id, text) => {
+    const label = $(id)?.closest('label');
+    if (label?.firstChild?.nodeType === Node.TEXT_NODE) label.firstChild.textContent = text;
+  };
   const replace = (id, options) => {
     const select = $(id);
     if (!select) return;
@@ -813,10 +832,17 @@ function normalizeSelectorLabels() {
     select.replaceChildren(...options.map(([label, value]) => new Option(label, value)));
     select.value = options.some(([, value]) => value === current) ? current : options[0][1];
   };
-  replace('queueSpeed', [['Low', 'low'], ['Mid', 'mid'], ['High', 'high']]);
-  replace('speed', [['Low', 'low'], ['Mid', 'mid'], ['High', 'high']]);
+  replace('queueSpeed', [['None', 'none'], ['Low', 'low'], ['Mid', 'medium'], ['High', 'high']]);
+  replace('speed', [['None', 'none'], ['Low', 'low'], ['Mid', 'medium'], ['High', 'high']]);
   replace('answerThinking', [['None', 'none'], ['Low', 'low'], ['Mid', 'medium'], ['High', 'high']]);
   replace('providerThinking', [['None', 'none'], ['Low', 'low'], ['Mid', 'medium'], ['High', 'high']]);
+  relabel('queueSpeed', '推理强度');
+  relabel('speed', '推理强度');
+  relabel('answerThinking', '推理强度');
+  relabel('providerThinking', '默认推理强度');
+  relabel('queueProvider', 'LLM 来源');
+  relabel('provider', 'LLM 来源');
+  relabel('answerProvider', '来源');
 }
 
 function prepareSearchAndChatPages() {

@@ -2,8 +2,8 @@
 
 服务端命令：
 
-```powershell
-cargo run --quiet -p readtrace-cli -- serve E:\AI_diary\summer_project\workspace --bind 127.0.0.1:8787
+```console
+cargo run --quiet -p readtrace-cli -- serve ./workspace --bind 127.0.0.1:8787
 ```
 
 打开 `http://127.0.0.1:8787/`。页面只调用下面的 JSON API；Vault 内的 Markdown/JSON 仍是最终数据源。启动参数中的路径决定初始上下文：传入 Workspace 目录可切换和创建多个 Vault；传入单个 Vault 仍可使用处理功能，但不能创建同级 Vault。
@@ -72,7 +72,7 @@ repair 请求的 `provider` 可选 `http`、`codex-cli`、`mock`，另可传 `pr
 
 ### 来源与密钥
 
-Web 的“来源与 API”页提供四个内置来源：清华 GLM-5.3 Flash、清华 GLM-5.2、Codex Luna High 和 Mock。新增来源时填写 Base URL（或完整 Endpoint）、模型、认证头/方案、Token 字段、响应格式和三档价格；API Key 可以直接写入密码框，也可以只填写环境变量名。服务端默认把自定义来源保存到 `%LOCALAPPDATA%/ReadTrace/providers.json`（可用 `READTRACE_PROVIDER_STORE` 改位置）。若当前进程没有权限写用户配置目录，会自动回退到当前 Vault 的 `.readtrace/providers.json`；`.readtrace/` 与 `providers.json` 均被 `.gitignore` 忽略。响应只给出 `key_present`，浏览器刷新后也不会拿到明文 Key；保存时密码框留空表示保留原值，勾选“清除已保存的 Key”才会删除。
+Web 的“来源与 API”页提供四个内置来源：清华 GLM-5.3 Flash、清华 GLM-5.2、Codex Luna High 和 Mock。新增来源时填写 Base URL（或完整 Endpoint）、模型、认证头/方案、Token 字段、响应格式和三档价格；API Key 可以直接写入密码框，也可以只填写环境变量名。服务端默认把自定义来源保存到 Windows 的 `%LOCALAPPDATA%/ReadTrace/providers.json` 或 macOS 的 `~/Library/Application Support/ReadTrace/providers.json`（可用 `READTRACE_PROVIDER_STORE` 改位置）。若当前进程没有权限写用户配置目录，会自动回退到当前 Vault 的 `.readtrace/providers.json`；`.readtrace/` 与 `providers.json` 均被 `.gitignore` 忽略。响应只给出 `key_present`，浏览器刷新后也不会拿到明文 Key；保存时密码框留空表示保留原值，勾选“清除已保存的 Key”才会删除。
 
 连接测试不是假的 UI 检查：它会使用当前来源的最小请求，显示 HTTP 状态、耗时、响应预览和 usage，并以 `purpose=provider_check` 追加到当前 Vault 的 `runtime/calls.jsonl`。如果服务没有返回 usage，Token/费用仍显示未知，而调用次数和失败状态照样统计。
 
@@ -94,12 +94,12 @@ Web 的“来源与 API”页提供四个内置来源：清华 GLM-5.3 Flash、�
 
 1. **工作台**显示文件数、批次数、可选单元和最近文件；
 2. **文件浏览**按全部/来源/生成/清洗/审计筛选，点击即可预览图片、PDF、Markdown、TXT、JSON；勾选 source/clean 后可跨 batch 合并或删除；
-3. **导入队列**允许通过 Windows/macOS 文件选择器选择多个文件或整个文件夹，也可以输入服务端可访问路径；浏览器上传项会先进入队列并复制到当前 Vault，路径导入仍可选择保留外部引用。每项都能选择内容类型，队列底部统一设置 OCR、LLM 后端、速度、模型、`clean` 发布名称和合并偏好；TXT/MD 可以选择直接发布到 clean（不调用 LLM），PDF/图片则选择后续处理或自动 OCR→修复→发布；
+3. **导入队列**允许通过 Windows/macOS 文件选择器选择多个文件或整个文件夹，也可以输入服务端可访问路径；浏览器上传项会先进入队列并复制到当前 Vault，路径导入仍可选择保留外部引用。每项都能选择内容类型，队列底部统一设置 OCR、LLM 来源、推理强度、模型、`clean` 发布名称和合并偏好；TXT/MD 可以选择直接发布到 clean（不调用 LLM），PDF/图片则选择后续处理或自动 OCR→修复→发布；
 4. **处理批次**按 OCR → 规范化 → LLM 修复 → revision 的步骤运行，每页修复仍由服务端并行且可在任务页取消；页面可编辑当前 Vault 的 repair prompt，保存后后续 repair 自动使用；
 5. **后台**集中显示最近事件、命令状态、完成/失败/取消结果、任务进度和 Token/费用；命令区采用终端式输出，进度事件会压缩成易读的最新状态；它位于侧边栏的工具区底部；
-6. **来源与 API**集中管理内置/自定义 Provider、Key 状态、价格和推理默认值，可直接测试连接；
+6. **来源与 API**集中管理内置/自定义 Provider、Key 状态、价格和默认推理强度，可直接测试连接；
 7. **检索**是独立页面，只调用本地索引并展示命中行前后文；
-8. **阅读与问答**使用显式引用的 clean 文件，不把 raw OCR 或 generated 历史自动送入模型；“添加引用”打开居中的搜索弹窗，左侧历史栏可以新建、切换和恢复已保存会话。模型默认选择 `GLM-5.2`，推理挡位默认 `None`，用户可在同一处切换来源和挡位。
+8. **阅读与问答**使用显式引用的 clean 文件，不把 raw OCR 或 generated 历史自动送入模型；“添加引用”打开居中的搜索弹窗，左侧历史栏可以新建、切换和恢复已保存会话。推理强度统一显示 `None/Low/Mid/High`；首次加载优先选择已经配置 Key 的自定义 `GLM-5.2`，没有该项时再选择其它可用来源。
 
 网页没有复制 CLI 的业务逻辑：所有文件写入、来源引用、合并校验、Token 统计和计费都在 Rust core 完成。网页刷新后，Vault 文件、批次状态和已落盘的运行记录仍然是权威状态；内存中的任务列表只用于显示本次服务进程的即时进度。批次页的“规范化”和“LLM 修复”是用户明确触发的重跑操作，会自动带 `refresh:true`，避免旧报告阻塞当前 OCR；多来源批次点击“生成文件”会先转为合并预览，必须确认后才写 revision。
 
@@ -109,7 +109,7 @@ Web 的“来源与 API”页提供四个内置来源：清华 GLM-5.3 Flash、�
 - `clean_name` 是 build/merge 请求的可选相对名称（例如 `剧本/第一章`）；服务端始终写入 `clean/<名称>/document.md`，拒绝父目录穿越，同名发布会更新 clean 投影并保留 generated 历史。
 - 文件浏览的 Markdown 预览提供编辑器和“保存”按钮；保存请求只接受 Vault 内的 `.md/.txt`，拒绝外部 source、raw 和审计目录，并自动刷新索引。原图、OCR 和来源快照始终保留。
 - `POST /api/answer` 支持 `query`、`source_refs`、`quotes`、`session_id` 以及独立的 Provider 选择。阅读室把结果渲染成连续的用户/助手气泡，保留当前 `session_id` 以支持追问；每轮回答显示引用数量、Token 和 USD 费用。点击“添加引用”会打开一个居中的选择器：顶部是 clean 全文搜索，下面是可折叠的 clean 文件树，支持文件名/路径本地即时筛选和多选；选中的文件会读入为带文件名的 `quotes`，不会把 raw OCR、图片、PDF、generated 历史或审计 JSON 送给模型。
-- 阅读室的“推理挡位”直接写入请求的 `thinking` 字段。界面只显示 `None/Low/Mid/High`；GLM-5.3/5.3-Flash 会把 `None` 和 `Mid` 映射到实际允许的最低 `low`，GLM-5.2 等模型可用 `none` 真正发送 `thinking.type=disabled`。Codex/其它 OpenAI-compatible provider 仍使用各自的 reasoning effort 语义。
+- 导入、批次处理、来源配置和阅读室都使用“推理强度”，并直接写入请求的 `thinking` 字段。界面统一显示 `None/Low/Mid/High`；GLM-5.3/5.3-Flash 会把 `None` 和 `Mid` 映射到实际允许的最低 `low`，GLM-5.2 等模型可用 `none` 真正发送 `thinking.type=disabled`。Codex/其它 OpenAI-compatible provider 仍使用各自的 reasoning effort 语义。
 - `GET /api/usage` 返回 input/cached-input/output/reasoning/total Token、费用和未知费用调用数。
 - `GET /api/activity` 返回最近事件、当前任务和用量摘要；事件类型包含 `task_started`、`progress`、`task_completed`、`warning`、`error`、`task_cancelled`。OCR/repair 服务任务在成功、部分失败或失败返回时都会追加终态事件；任务 API 使用 `completed_with_errors` 区分“部分成功”，不会把 `{errors:N,repaired_pages:0}` 显示成完成。终端视图把历史启动/进度行作为事件记录，不再把它们伪装成持续运行中的任务；实际运行状态以任务卡片为准。
 - `GET /api/events` 是兼容性的全局 SSE；GUI 的进度以 task API 为准。
