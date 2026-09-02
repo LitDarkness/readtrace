@@ -9,6 +9,8 @@
 
 除源代码 Git 提交外，其余交付物按网络学堂作业要求整理；本项目不负责自动上传或 push。
 
+开发期间的原始记录属于需要保留的审计材料。`runtime/`、`tmp/`、`workspace/` 和 `deliverables/` 虽然被 `.gitignore` 排除，清理源码时不要删除；最终提交作业前，再从这些目录导出 AI 对话记录、运行时汇总和 Excel，不要把本机 Key 或整个 Vault 直接加入 Git。
+
 ## 二、两种成本必须分开
 
 ### 1. 项目运行时成本（自动记录）
@@ -109,4 +111,4 @@ deliverables/
 - [`CLI_TUTORIAL.md`](CLI_TUTORIAL.md)：从 import 到 repair/build、删除、恢复和 Web API 的操作手册。
 - [`CLI_END_TO_END_EXAMPLE.md`](CLI_END_TO_END_EXAMPLE.md)：假设完全不了解项目时，从路径、导入、OCR、推理强度到合并、引用问答和费用查看的可复制示例。
 - [`GITHUB_AND_DEVICE_SETUP.md`](GITHUB_AND_DEVICE_SETUP.md)：Windows/macOS 安装、`.env`、迁移、Web 启动与排错。
-- `ARCHITECTURE_AND_SUBMISSION.md`、`ASRS.md`、`CORE_LOGIC_AND_DESIGN.md`：已同步为当前整页修复设计的课程说明/过程记录。
+- `ASRS.md`、`CORE_LOGIC_AND_DESIGN.md`：当前需求、设计决策和开发过程记录；课程交付文档在最终验收时统一整理。
