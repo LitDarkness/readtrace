@@ -1,0 +1,30 @@
+/target/
+/tmp/
+/outputs/
+*.db
+*.tmp
+.env
+.env.*
+!.env.example
+# Local workspaces, imported sources, generated revisions, and runtime ledgers
+# are user data. Keep them out of the source repository; migrate a Vault with
+# `export-vault` or a separate backup when needed.
+/workspace/
+/runtime/
+/input/
+/deliverables/
+/t02-ai-agent.pdf
+/.readtrace/
+**/.readtrace/
+**/providers.json
+demo-vault/
+web-demo/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# 网络学堂交付物和开发期间的原始导出不属于源代码提交。
+/artifacts/
