@@ -131,7 +131,7 @@ git push origin v0.1.0
 ## 用户如何使用发布包
 
 1. 下载与设备匹配的压缩包并解压到用户有写权限的目录。
-2. 在一个单独的可写目录创建 Workspace 和第一个 Vault，然后运行 `readtrace serve <workspace>`；上面的平台示例可以直接复制。GUI 会在浏览器中打开；Provider（HTTP、Codex CLI、Mock）在 GUI 的设置页中配置，Key 保存在本机用户目录，不进入压缩包和 Git。
+2. 在一个单独的可写目录创建 Workspace 和第一个 Vault，然后运行 `readtrace serve <workspace>`；上面的平台示例可以直接复制。服务启动后访问 `http://127.0.0.1:8787/`；Provider（HTTP、Codex CLI、Mock）在 GUI 的设置页中配置，Key 保存在本机用户目录，不进入压缩包和 Git。
 3. 在 GUI 中创建或选择 Workspace/Vault。导入的素材和运行数据留在 Vault；发布包目录只保存程序和第三方运行时。
 4. Windows 用户不需要再安装 `tesseract`、`tesseract-lang` 或 Poppler。若要使用系统版本，可在 `.env` 中显式设置 `READTRACE_TESSERACT_BIN`、`READTRACE_PDFTOPPM_BIN` 和 `READTRACE_PDFINFO_BIN`。
 5. macOS 首次打开未签名二进制时，若系统提示阻止，可在“系统设置 → 隐私与安全性”中允许本次打开；这不是安装器行为，发布包不会修改系统目录。
