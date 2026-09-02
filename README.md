@@ -147,7 +147,7 @@ cargo run --quiet -p readtrace-cli -- vault-create ./workspace <名称>
 
 工作台支持 Workspace/Vault 切换、文件树、导入队列、批次处理、跨 batch 合并、clean 预览和编辑、来源配置、检索、引用问答以及后台 Token/费用查看。
 
-## 5. CLI 的完整流程
+## 5. CLI 的完整流程 (可选)
 
 ### 5.1 创建或查看 Vault
 
