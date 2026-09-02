@@ -71,7 +71,7 @@ cargo run --quiet -p readtrace-cli -- provider-check --preset codex-luna --speed
 
 当前 `first_run` Vault 的 ledger（含本轮 Chrome 流程）为 43 次调用、123,631 total Token（input 105,883、output 17,748、cached input 27,136），已计费 `$0.02511802`；已知 `gpt-5.6-luna` 按官方价计算，Mock 为 `$0`，15 条没有 provider usage 的 Codex 失败调用仍计入 `unknown_cost_calls`。这个运行时汇总不替代课程要求的开发阶段 Excel。
 
-为避免把探针和临时测试漏掉，最新 `usage --scan-root .` 已扫描项目内全部 JSONL 并按 `call_id` 去重：81 次调用，input 260,990、cached input 62,976、output 20,230、total 281,220 Token；已知调用费用合计 `$0.05201652`（约 `¥0.356417936`），29 次失败，37 条因宿主或 Provider 未返回 usage/价格而保持 unknown。该快照位于 [`deliverables/runtime-usage-all.json`](../deliverables/runtime-usage-all.json)，删除的临时 Vault 不再参与统计。此次新增的来源连接测试和 Mock 对话也已进入台账；Mock 明确按 `$0` 处理。
+为避免把探针和临时测试漏掉，最新 `usage --scan-root .` 已扫描项目内全部 JSONL 并按 `call_id` 去重：81 次调用，input 260,990、cached input 62,976、output 20,230、total 281,220 Token；已知调用费用合计 `$0.05201652`（约 `¥0.356417936`），29 次失败，37 条因宿主或 Provider 未返回 usage/价格而保持 unknown。该快照保存在本机 `deliverables/runtime-usage-all.json`（`deliverables/` 被 `.gitignore` 刻意排除，需按课程要求单独提交），删除的临时 Vault 不再参与统计。此次新增的来源连接测试和 Mock 对话也已进入台账；Mock 明确按 `$0` 处理。
 
 ## GUI 协议与当前实现（P1）
 
