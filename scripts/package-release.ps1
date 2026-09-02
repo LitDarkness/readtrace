@@ -100,8 +100,10 @@ foreach ($language in @("chi_sim", "eng")) {
         Invoke-WebRequest -Uri $url -OutFile $languageFile
     }
 }
-if (-not (Test-Path -LiteralPath (Join-Path $stageTessdata "chi_sim.traineddata"))) {
-    throw "chi_sim.traineddata is missing from the release"
+foreach ($language in @("chi_sim", "eng")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $stageTessdata "$language.traineddata"))) {
+        throw "$language.traineddata is missing from the release"
+    }
 }
 
 $licenseSources = @(

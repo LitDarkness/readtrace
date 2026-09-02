@@ -64,10 +64,12 @@ for language in chi_sim eng; do
       -o "$STAGE/tools/tesseract/tessdata/$language.traineddata"
   fi
 done
-[[ -f "$STAGE/tools/tesseract/tessdata/chi_sim.traineddata" ]] || {
-  echo "chi_sim.traineddata is missing from the release." >&2
-  exit 1
-}
+for language in chi_sim eng; do
+  [[ -f "$STAGE/tools/tesseract/tessdata/$language.traineddata" ]] || {
+    echo "$language.traineddata is missing from the release." >&2
+    exit 1
+  }
+done
 
 if [[ -d "$(brew --prefix poppler)/share" ]]; then
   cp -R "$(brew --prefix poppler)/share" "$STAGE/tools/poppler/share"
