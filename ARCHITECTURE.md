@@ -14,4 +14,4 @@
 - repair 默认 4 路有界并行（`READTRACE_LLM_CONCURRENCY=1..64`），结果仍按原始页序落盘。
 - Web 以 Workspace 启动时提供 Vault 列表/切换、task 状态与取消、merge-plan 人工编辑和 revision 预览；`crates/readtrace-server/static/` 是无构建步骤的第一版 GUI。
 
-命令操作见 [`docs/CLI_TUTORIAL.md`](docs/CLI_TUTORIAL.md)，从零示例见 [`docs/CLI_END_TO_END_EXAMPLE.md`](docs/CLI_END_TO_END_EXAMPLE.md)，Web/GUI 端点见 [`docs/WEB_GUI_PROTOCOL.md`](docs/WEB_GUI_PROTOCOL.md)，课程交付字段见 [`docs/DELIVERABLES_AND_COST_NOTES.md`](docs/DELIVERABLES_AND_COST_NOTES.md)。CLI 默认输出人类摘要，脚本可用 `--format json` 保留完整结构。
+第一次启动请看 [`docs/QUICK_START.md`](docs/QUICK_START.md)；命令操作见 [`docs/CLI_TUTORIAL.md`](docs/CLI_TUTORIAL.md)，从零示例见 [`docs/CLI_END_TO_END_EXAMPLE.md`](docs/CLI_END_TO_END_EXAMPLE.md)，Web/GUI 端点见 [`docs/WEB_GUI_PROTOCOL.md`](docs/WEB_GUI_PROTOCOL.md)，课程交付字段见 [`docs/DELIVERABLES_AND_COST_NOTES.md`](docs/DELIVERABLES_AND_COST_NOTES.md)。CLI 默认输出人类摘要，脚本可用 `--format json` 保留完整结构。

@@ -1,6 +1,6 @@
 # ReadTrace 完整流程教程
 
-这份教程从空 Workspace 开始，完成三种输入：一个 PDF、一个 Markdown 文件和两张图片。正文保留已在 Windows 验证的 PowerShell 记录。macOS 先按 [`GITHUB_AND_DEVICE_SETUP.md`](GITHUB_AND_DEVICE_SETUP.md) 安装依赖，再将 Windows 路径换成正斜杠路径、PowerShell 反引号换成 shell 反斜杠；所有 ReadTrace CLI 参数保持不变。命令都从项目根目录运行，也就是：
+这份教程是 CLI 的完整复现流程，从空 Workspace 开始，完成三种输入：一个 PDF、一个 Markdown 文件和两张图片。第一次使用或希望直接操作 GUI 时，请先看 [`QUICK_START.md`](QUICK_START.md)；Windows 的 Tesseract/Poppler 安装也在那里按步骤说明。正文保留已在 Windows 验证的 PowerShell 记录。macOS 先按 [`GITHUB_AND_DEVICE_SETUP.md`](GITHUB_AND_DEVICE_SETUP.md) 安装依赖，再将 Windows 路径换成正斜杠路径、PowerShell 反引号换成 shell 反斜杠；所有 ReadTrace CLI 参数保持不变。命令都从项目根目录运行，也就是：
 
 ```powershell
 Set-Location E:\AI_diary\summer_project

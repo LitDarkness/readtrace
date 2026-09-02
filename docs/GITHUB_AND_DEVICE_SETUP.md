@@ -4,6 +4,8 @@
 
 除非单独标为 PowerShell 或 zsh/bash，命令都从项目根目录执行，并且适用于 Windows 与 macOS。文中的 `<项目目录>`、`<仓库>` 和 `<用户名>` 必须替换为本机实际值；不要照抄旧电脑的 `E:` 盘路径到 Mac。
 
+如果只是第一次启动并使用 Web 工作台，先看 [`QUICK_START.md`](QUICK_START.md)；本文保留完整的 GitHub、设备迁移和排错说明。
+
 ## 一、首次上传到 GitHub
 
 ### 1. 提交前检查
@@ -87,7 +89,11 @@ command -v codex
 
 ### 3. Windows 安装
 
-如果旧 Windows 环境已经运行成功，优先保留原来的 Tesseract/Poppler 安装目录。新设备可按 [Tesseract 官方安装说明](https://tesseract-ocr.github.io/tessdoc/Installation.html) 安装带中文语言包的 Windows 构建，并安装包含 `pdfinfo.exe`、`pdftoppm.exe` 的 Poppler Windows 构建。
+如果旧 Windows 环境已经运行成功，优先保留原来的 Tesseract/Poppler 安装目录。新设备按下面顺序安装：
+
+1. 按 [Tesseract 官方安装说明](https://tesseract-ocr.github.io/tessdoc/Installation.html) 安装 Windows 构建；安装器中加入 Simplified Chinese，或把 `chi_sim.traineddata` 放入 `tessdata`。Windows 不需要执行 `tesseract-lang`，那是 Homebrew 的语言包名称。
+2. 安装一个包含 `pdfinfo.exe` 和 `pdftoppm.exe` 的 Poppler Windows 构建；例如可使用 [poppler-windows releases](https://github.com/oschwartz10612/poppler-windows/releases)，解压后记下 `Library\bin` 目录。
+3. 在项目 `.env` 填写三个可执行文件和 `TESSDATA_PREFIX` 的绝对路径，不要求先修改系统级 `PATH`。
 
 在 PowerShell 检查：
 

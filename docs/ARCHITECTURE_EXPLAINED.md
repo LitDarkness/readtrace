@@ -221,6 +221,7 @@ Web API 由 readtrace-server 提供，前端静态文件位于 crates/readtrace-
 
 相关操作手册：
 
+- 第一次启动：[docs/QUICK_START.md](QUICK_START.md)
 - CLI：[docs/CLI_TUTORIAL.md](CLI_TUTORIAL.md) 和 [docs/CLI_END_TO_END_EXAMPLE.md](CLI_END_TO_END_EXAMPLE.md)
 - 完整 PDF/Markdown/图片样例：[docs/COMPLETE_FLOW_TUTORIAL.md](COMPLETE_FLOW_TUTORIAL.md)
 - 双平台安装与 GitHub：[docs/GITHUB_AND_DEVICE_SETUP.md](GITHUB_AND_DEVICE_SETUP.md)

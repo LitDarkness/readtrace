@@ -9,6 +9,8 @@ ReadTrace 的边界很明确：
 - 搜索和引用只面向 clean/ 中的最终文档。视觉页面必须先有完整修复；显式使用 --allow-unrepaired 时可以生成带警告的临时稿，但该稿不能成为问答证据。
 - 同一个 Rust 协议同时服务 CLI 和 Web；Web 只是工作台界面，不另写一套业务逻辑。
 
+如果是第一次使用，建议先看 [docs/QUICK_START.md](docs/QUICK_START.md)：它从 Windows/macOS 依赖安装开始，先启动 Web，再在 GUI 中配置 Provider、导入文件和完成一次问答。
+
 ## 1. 先理解三个路径
 
 以下命令均假设当前目录是项目根目录：
@@ -48,6 +50,8 @@ Intel Mac 将 /opt/homebrew 换成 /usr/local。若 ocr-check 找不到 chi_sim�
 
 ### Windows
 
+Windows 的完整安装顺序是：安装 Tesseract（含 chi_sim 语言数据）、安装包含 pdfinfo.exe 和 pdftoppm.exe 的 Poppler、用 PowerShell 验证三个程序，再把绝对路径写入 .env。Windows 不需要执行名为 tesseract-lang 的命令；它对应的是 Windows 安装器中的语言数据或 tessdata 文件。逐步截图式说明见 [docs/QUICK_START.md](docs/QUICK_START.md)。
+
 在 .env 填写机器上的绝对路径：
 
 ~~~dotenv
@@ -73,7 +77,9 @@ cargo run --quiet -p readtrace-cli -- ocr-check
 
 PDF 会先显示栅格化 0/N、n/N 进度，再显示逐页 Tesseract 进度。OCR 并发范围是 1–16，默认 4；降低 READTRACE_OCR_DPI（例如 150）通常更快，但小字识别可能变差。
 
-## 3. 配置 HTTP、Codex 和 Mock
+## 3. 可选：配置 HTTP、Codex 和 Mock
+
+启动 Web 和测试界面不要求先配置 Provider。没有 Key 时可以选择 Mock；真实图片/PDF OCR 只要求 Tesseract/Poppler。需要 LLM 修复或问答时，可以在 GUI 的“来源与 API”页面添加 profile，也可以按下面的方式在 `.env` 配置。
 
 复制配置模板：
 

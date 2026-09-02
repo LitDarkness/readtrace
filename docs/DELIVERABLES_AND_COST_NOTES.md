@@ -108,6 +108,7 @@ deliverables/
 ## 四、当前文档索引
 
 - [`ARCHITECTURE_EXPLAINED.md`](ARCHITECTURE_EXPLAINED.md)：当前实现的模块、数据流、结构、Provider 和费用。
+- [`QUICK_START.md`](QUICK_START.md)：Windows/macOS 依赖安装、可选 Provider 配置和第一次启动 Web 的最短路径。
 - [`CLI_TUTORIAL.md`](CLI_TUTORIAL.md)：从 import 到 repair/build、删除、恢复和 Web API 的操作手册。
 - [`CLI_END_TO_END_EXAMPLE.md`](CLI_END_TO_END_EXAMPLE.md)：假设完全不了解项目时，从路径、导入、OCR、推理强度到合并、引用问答和费用查看的可复制示例。
 - [`GITHUB_AND_DEVICE_SETUP.md`](GITHUB_AND_DEVICE_SETUP.md)：Windows/macOS 安装、`.env`、迁移、Web 启动与排错。

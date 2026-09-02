@@ -11,6 +11,8 @@
 
 双平台依赖安装、`.env` 和迁移步骤见 [`GITHUB_AND_DEVICE_SETUP.md`](GITHUB_AND_DEVICE_SETUP.md)。
 
+第一次使用不必先掌握 CLI：先按 [`QUICK_START.md`](QUICK_START.md) 安装 OCR 依赖并启动 Web；本文用于需要脚本化、断点恢复或批量操作时的命令速查。Provider 配置是可选的，`mock` 可以在没有 Key 的情况下验证流程。
+
 CLI 默认输出适合人阅读的摘要；脚本需要完整 JSON 时，在命令前或后加 `--format json`。例如 `ls $workspace` 会输出 Vault 列表，`ls $workspace --format json` 保留完整原始结构；所有 JSON 命令都遵循这条规则。
 
 如果希望从“我完全不知道目录和 batch 是什么”开始照着走，请先看 [`CLI_END_TO_END_EXAMPLE.md`](CLI_END_TO_END_EXAMPLE.md)；本文保留各命令的速查说明。
