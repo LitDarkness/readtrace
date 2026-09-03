@@ -16,11 +16,13 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
       - name: Install stable Rust
         shell: bash
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+
       - name: Format, lint and test
         run: |
           cargo fmt --all -- --check
@@ -31,42 +33,95 @@ jobs:
     name: Package Windows x86_64
     needs: test
     runs-on: windows-latest
+    timeout-minutes: 45
+
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
       - name: Install Rust and OCR tools
         shell: powershell
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+
           choco install tesseract -y --no-progress
+
+          $tesseractExe = Get-Item `
+            "C:\Program Files\Tesseract-OCR\tesseract.exe" `
+            -ErrorAction SilentlyContinue
+
+          if (-not $tesseractExe) {
+              $tesseractExe = Get-ChildItem "C:\Program Files" `
+                -Recurse `
+                -Filter "tesseract.exe" `
+                -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+          }
+
+          if (-not $tesseractExe) {
+              throw "tesseract.exe not found after Chocolatey installation"
+          }
+
           $popplerVersion = "26.02.0-0"
           $popplerZip = "$env:TEMP\poppler.zip"
-          Invoke-WebRequest -Uri "https://github.com/oschwartz10612/poppler-windows/releases/download/v$popplerVersion/Release-$popplerVersion.zip" -OutFile $popplerZip -UseBasicParsing
-          Expand-Archive -Path $popplerZip -DestinationPath "C:\ProgramData\poppler" -Force
-          Remove-Item -LiteralPath $popplerZip -Force -ErrorAction SilentlyContinue
-          $popplerExe = Get-ChildItem "C:\ProgramData\poppler" -Recurse -Filter "pdftoppm.exe" | Select-Object -First 1
+          $popplerRoot = "C:\ProgramData\poppler"
+
+          Invoke-WebRequest `
+            -Uri "https://github.com/oschwartz10612/poppler-windows/releases/download/v$popplerVersion/Release-$popplerVersion.zip" `
+            -OutFile $popplerZip `
+            -UseBasicParsing
+
+          if (Test-Path -LiteralPath $popplerRoot) {
+              Remove-Item -LiteralPath $popplerRoot -Recurse -Force
+          }
+
+          Expand-Archive `
+            -Path $popplerZip `
+            -DestinationPath $popplerRoot `
+            -Force
+
+          Remove-Item `
+            -LiteralPath $popplerZip `
+            -Force `
+            -ErrorAction SilentlyContinue
+
+          $popplerExe = Get-ChildItem $popplerRoot `
+            -Recurse `
+            -Filter "pdftoppm.exe" |
+            Select-Object -First 1
+
           if (-not $popplerExe) {
               throw "pdftoppm.exe not found after expanding Poppler archive"
           }
-          $popplerBin = $popplerExe.Directory.FullName
-          $popplerBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          try {
-              [Environment]::SetEnvironmentVariable('Path', "$([Environment]::GetEnvironmentVariable('Path', 'Machine'));$popplerBin", 'Machine')
-          } catch {}
-          $env:Path = "$env:Path;" + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $popplerBin
-          "PATH refreshed; tesseract=$(Get-Command tesseract.exe | Select-Object -ExpandProperty Source)"
-          "PATH refreshed; pdftoppm=$(Get-Command pdftoppm.exe | Select-Object -ExpandProperty Source)"
+
+          $pdfinfoExe = Join-Path $popplerExe.Directory.FullName "pdfinfo.exe"
+
+          if (-not (Test-Path -LiteralPath $pdfinfoExe)) {
+              throw "pdfinfo.exe not found beside pdftoppm.exe"
+          }
+
+          $tesseractExe.Directory.FullName |
+            Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          $popplerExe.Directory.FullName |
+            Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          Write-Host "Tesseract: $($tesseractExe.FullName)"
+          Write-Host "pdftoppm:  $($popplerExe.FullName)"
+          Write-Host "pdfinfo:   $pdfinfoExe"
+
       - name: Build self-contained package
         shell: powershell
         run: |
-          $env:Path = "$env:Path;" + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
-          $tesseract = (Get-Command tesseract.exe).Source
-          $pdftoppm = (Get-Command pdftoppm.exe).Source
+          $tesseract = (Get-Command tesseract.exe -ErrorAction Stop).Source
+          $pdftoppm = (Get-Command pdftoppm.exe -ErrorAction Stop).Source
+
           & .\scripts\package-release.ps1 `
             -Version "${{ github.ref_name }}" `
             -TesseractBin $tesseract `
             -PopplerBin $pdftoppm
+
       - name: Upload Windows archive
         uses: actions/upload-artifact@v4
         with:
@@ -78,6 +133,8 @@ jobs:
     name: Package macOS arm64
     needs: test
     runs-on: macos-15
+    timeout-minutes: 45
+
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -115,22 +172,41 @@ jobs:
     needs:
       - windows
       - macos
+
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
+
     steps:
       - name: Download packaged archives
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-      - name: Create release and upload archives
+
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
+          set -euo pipefail
+
           sha256sum dist/readtrace-* > dist/SHA256SUMS.txt
-          gh release create "${GITHUB_REF_NAME}" dist/* \
-            --repo "${GITHUB_REPOSITORY}" \
-            --title "ReadTrace ${GITHUB_REF_NAME}" \
-            --generate-notes
+
+          if gh release view "${GITHUB_REF_NAME}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              >/dev/null 2>&1; then
+
+            echo "Release already exists; replacing assets."
+
+            gh release upload "${GITHUB_REF_NAME}" dist/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" dist/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "ReadTrace ${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
