@@ -9,9 +9,56 @@ ReadTrace 的边界很明确：
 - 搜索和引用只面向 clean/ 中的最终文档。视觉页面必须先有完整修复；显式使用 --allow-unrepaired 时可以生成带警告的临时稿，但该稿不能成为问答证据。
 - 同一个 Rust 协议同时服务 CLI 和 Web；Web 只是工作台界面，不另写一套业务逻辑。
 
-如果是第一次使用，建议先看 [docs/QUICK_START.md](docs/QUICK_START.md)：它从 Windows/macOS 依赖安装开始，先启动 Web，再在 GUI 中配置 Provider、导入文件和完成一次问答。
+## 快速开始
 
-如果要给课程或个人设备分发程序，直接下载 GitHub Releases 中对应平台的压缩包即可；它已经包含 Tesseract、中文/英文语言数据、Poppler 和许可证，不需要复杂安装器。维护者的打包、标签和跨设备流程见 [docs/RELEASE_GUIDE.md](docs/RELEASE_GUIDE.md)。
+### 直接使用 Release（推荐）
+
+如果你只是想使用 ReadTrace，**不需要安装 Rust、Tesseract 或 Poppler**。
+
+从 [GitHub Releases](https://github.com/LitDarkness/readtrace/releases/latest) 下载对应平台的自包含版本：
+
+* Windows x86_64：`readtrace-*-windows-x86_64.zip`
+* macOS Apple Silicon：`readtrace-*-macos-arm64.tar.gz`
+
+Release 已经包含 ReadTrace、Tesseract、`chi_sim` / `eng` OCR 语言数据以及 Poppler。
+
+解压后不要单独移动 `readtrace` / `readtrace.exe`，应保留整个目录，因为 `tools/` 中包含 OCR 和 PDF 运行时依赖。
+
+#### Windows
+
+```powershell
+.\readtrace.exe ocr-check
+.\readtrace.exe workspace-init .\workspace
+.\readtrace.exe vault-create .\workspace default
+.\readtrace.exe serve .\workspace --bind 127.0.0.1:8787
+```
+
+#### macOS Apple Silicon
+
+```bash
+chmod +x ./readtrace
+
+./readtrace ocr-check
+./readtrace workspace-init ./workspace
+./readtrace vault-create ./workspace default
+./readtrace serve ./workspace --bind 127.0.0.1:8787
+```
+
+然后打开：
+
+http://127.0.0.1:8787/
+
+以后再次启动时只需要执行 `serve`。
+
+建议把程序目录和 Workspace 分开保存。升级 ReadTrace 时只替换程序目录，不会影响 Workspace 中的 Vault 和文档。
+
+完整的首次使用流程见 [docs/QUICK_START.md](docs/QUICK_START.md)。
+
+### 从源码运行（开发者）
+
+如果你需要修改 ReadTrace、运行测试或参与开发，再从源码构建。源码开发需要 Rust stable；处理图片/PDF 时还需要本机安装 Tesseract 和 Poppler。
+
+详见下面的开发环境说明以及 [docs/QUICK_START.md](docs/QUICK_START.md) 的“从源码运行”部分。
 
 ## 1. 先理解三个路径
 
