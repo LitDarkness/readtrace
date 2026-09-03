@@ -39,14 +39,28 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
-          choco install tesseract poppler -y --no-progress
-          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          choco install tesseract -y --no-progress
+          $popplerVersion = "26.02.0-0"
+          $popplerZip = "$env:TEMP\poppler.zip"
+          Invoke-WebRequest -Uri "https://github.com/oschwartz10612/poppler-windows/releases/download/v$popplerVersion/Release-$popplerVersion.zip" -OutFile $popplerZip -UseBasicParsing
+          Expand-Archive -Path $popplerZip -DestinationPath "C:\ProgramData\poppler" -Force
+          Remove-Item -LiteralPath $popplerZip -Force -ErrorAction SilentlyContinue
+          $popplerExe = Get-ChildItem "C:\ProgramData\poppler" -Recurse -Filter "pdftoppm.exe" | Select-Object -First 1
+          if (-not $popplerExe) {
+              throw "pdftoppm.exe not found after expanding Poppler archive"
+          }
+          $popplerBin = $popplerExe.Directory.FullName
+          $popplerBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          try {
+              [Environment]::SetEnvironmentVariable('Path', "$([Environment]::GetEnvironmentVariable('Path', 'Machine'));$popplerBin", 'Machine')
+          } catch {}
+          $env:Path = "$env:Path;" + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $popplerBin
           "PATH refreshed; tesseract=$(Get-Command tesseract.exe | Select-Object -ExpandProperty Source)"
           "PATH refreshed; pdftoppm=$(Get-Command pdftoppm.exe | Select-Object -ExpandProperty Source)"
       - name: Build self-contained package
         shell: powershell
         run: |
-          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $env:Path = "$env:Path;" + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
           $tesseract = (Get-Command tesseract.exe).Source
           $pdftoppm = (Get-Command pdftoppm.exe).Source
           & .\scripts\package-release.ps1 `

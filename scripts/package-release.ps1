@@ -83,6 +83,11 @@ $popplerShare = Join-Path (Split-Path $popplerDir -Parent) "share"
 if (Test-Path -LiteralPath $popplerShare -PathType Container) {
     Copy-Item -LiteralPath $popplerShare -Destination "$stage\tools\poppler\share" -Recurse -Force
 }
+$popplerDistShare = Join-Path (Split-Path (Split-Path $popplerDir -Parent) -Parent) "share"
+if (Test-Path -LiteralPath $popplerDistShare -PathType Container) {
+    New-Item -ItemType Directory -Force -Path "$stage\tools\poppler\share" | Out-Null
+    Get-ChildItem -LiteralPath $popplerDistShare | Copy-Item -Destination "$stage\tools\poppler\share" -Recurse -Force
+}
 
 $stageTessdata = Join-Path $stage "tools\tesseract\tessdata"
 New-Item -ItemType Directory -Force -Path $stageTessdata | Out-Null
