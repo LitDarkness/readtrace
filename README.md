@@ -52,7 +52,9 @@ http://127.0.0.1:8787/
 
 建议把程序目录和 Workspace 分开保存。升级 ReadTrace 时只替换程序目录，不会影响 Workspace 中的 Vault 和文档。
 
-完整的首次使用流程见 [docs/QUICK_START.md](docs/QUICK_START.md)。
+初次使用，你需要在 “来源与 API” 中选择使用 CodeX 、GLM 或者自定义的服务商，以及提供 API key。
+
+完整的首次使用流程见 [docs/QUICK_START.md](docs/QUICK_START.md) 的第 5 部分 (第一次启动 Web 工作台)。
 
 ### 从源码运行（开发者）
 
