@@ -77,22 +77,32 @@ jobs:
   macos:
     name: Package macOS arm64
     needs: test
-    # macos-14 is an Apple Silicon hosted runner. Do not change this to an
-    # Intel runner: the archive is deliberately native arm64 for this phase.
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
       - name: Install stable Rust
         shell: bash
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+
+      - name: Show macOS environment
+        shell: bash
+        run: |
+          uname -a
+          uname -m
+          sw_vers
+          brew --version
+          brew --prefix
+
       - name: Build self-contained package
         shell: bash
         env:
           VERSION: ${{ github.ref_name }}
         run: bash scripts/package-release-macos.sh
+
       - name: Upload macOS archive
         uses: actions/upload-artifact@v4
         with:

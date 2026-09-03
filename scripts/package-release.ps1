@@ -136,16 +136,26 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destin
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination "$stage\README.md" -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\QUICK_START.md") -Destination "$stage\QUICK_START.md" -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot ".env.example") -Destination "$stage\.env.example" -Force
+$tesseractVersion = (& $tesseract --version 2>&1 |
+    Select-Object -First 1).ToString().Trim()
+
+# pdftoppm -v writes its version to stderr.
+# Capture it through cmd.exe so Windows PowerShell does not turn the
+# perfectly normal stderr output into NativeCommandError when
+# $ErrorActionPreference = "Stop".
+$popplerVersion = (& cmd.exe /d /s /c "`"$pdftoppm`" -v 2>&1" |
+    Select-Object -First 1).ToString().Trim()
+
 @{
     version = $Version
     target = "windows-x86_64"
     readtrace = "readtrace.exe"
-    tesseract = (& $tesseract --version 2>&1 | Select-Object -First 1).ToString().Trim()
-    poppler = (& $pdftoppm -v 2>&1 | Select-Object -First 1).ToString().Trim()
+    tesseract = $tesseractVersion
+    poppler = $popplerVersion
     tessdata_ref = $TessdataRef
     packaged_at_utc = [DateTime]::UtcNow.ToString("o")
-} | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $stage "release-manifest.json")
-
+} | ConvertTo-Json -Depth 4 |
+    Set-Content -Encoding UTF8 (Join-Path $stage "release-manifest.json")
 New-Item -ItemType Directory -Force -Path $distRoot | Out-Null
 if (Test-Path -LiteralPath $archive) {
     Remove-Item -LiteralPath $archive -Force
