@@ -72,6 +72,8 @@ VERSION=v0.1.0 bash scripts/package-release-macos.sh
 tar -xzf readtrace-v0.1.0-macos-arm64.tar.gz
 cd readtrace-v0.1.0-macos-arm64
 chmod +x readtrace
+# 当前 Release 为 ad-hoc 签名；确认包来源可信后，首次使用可清除下载隔离标记
+xattr -dr com.apple.quarantine "$PWD"
 ./readtrace workspace-init "$HOME/ReadTrace/workspace"
 ./readtrace vault-create "$HOME/ReadTrace/workspace" default
 ./readtrace serve "$HOME/ReadTrace/workspace" --bind 127.0.0.1:8787
@@ -89,7 +91,7 @@ VERSION=v0.1.0 TESSDATA_ROOT=/path/to/tessdata bash scripts/package-release-maco
 
 - 推送 `v*` 标签时，先在 Ubuntu 上执行格式检查、测试和 Clippy；
 - 在 `windows-latest` 上安装 Tesseract/Poppler 并构建 Windows 包；
-- 在 `macos-14` Apple Silicon runner 上构建 macOS arm64 包；
+- 在 `macos-15` Apple Silicon runner 上构建 macOS arm64 包；工作流会先检查 `uname -m`，如果不是 `arm64` 就拒绝打包；
 - 两个包都通过 GitHub Actions artifact 汇总；
 - 只有标签触发的运行会自动创建 GitHub Release 并上传压缩包；手动触发只生成可下载的 Actions artifacts，不会误建一个名为 `main` 的 Release。
 
@@ -134,7 +136,8 @@ git push origin v0.1.0
 2. 在一个单独的可写目录创建 Workspace 和第一个 Vault，然后运行 `readtrace serve <workspace>`；上面的平台示例可以直接复制。服务启动后访问 `http://127.0.0.1:8787/`；Provider（HTTP、Codex CLI、Mock）在 GUI 的设置页中配置，Key 保存在本机用户目录，不进入压缩包和 Git。
 3. 在 GUI 中创建或选择 Workspace/Vault。导入的素材和运行数据留在 Vault；发布包目录只保存程序和第三方运行时。
 4. Windows 用户不需要再安装 `tesseract`、`tesseract-lang` 或 Poppler。若要使用系统版本，可在 `.env` 中显式设置 `READTRACE_TESSERACT_BIN`、`READTRACE_PDFTOPPM_BIN` 和 `READTRACE_PDFINFO_BIN`。
-5. macOS 首次打开未签名二进制时，若系统提示阻止，可在“系统设置 → 隐私与安全性”中允许本次打开；这不是安装器行为，发布包不会修改系统目录。
+5. macOS Release 暂未做 Developer ID 签名和 notarization。若系统提示阻止，确认压缩包来源可信后在解压目录执行 `xattr -dr com.apple.quarantine "$PWD"`，再运行 `./readtrace ocr-check`。这只是清除下载隔离标记，发布包不会修改系统目录；未来完成公证后可移除这一步。
+6. Windows 若默认的 8787 被系统保留（常见错误 10013），ReadTrace 会自动切换到一个可用的本机端口，并把最终 URL 打印到终端。
 
 ## 发布前检查表
 

@@ -40,6 +40,10 @@ Release 已经包含 ReadTrace、Tesseract、`chi_sim` / `eng` OCR 语言数据�
 ```bash
 chmod +x ./readtrace
 
+# Release 包目前是 ad-hoc 签名，首次下载后如被 Gatekeeper 拦截，
+# 在确认压缩包来源可信后，在解压目录执行一次：
+xattr -dr com.apple.quarantine "$PWD"
+
 ./readtrace ocr-check
 ./readtrace workspace-init ./workspace
 ./readtrace vault-create ./workspace default
@@ -49,6 +53,8 @@ chmod +x ./readtrace
 然后打开：
 
 http://127.0.0.1:8787/
+
+如果 8787 被 Windows/WSL 或其它系统组件保留，ReadTrace 会自动申请一个可用的本机回环端口，并在终端打印实际地址；按终端打印的地址打开浏览器即可。
 
 以后再次启动时只需要执行 `serve`。
 

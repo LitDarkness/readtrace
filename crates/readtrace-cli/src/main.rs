@@ -773,7 +773,8 @@ async fn main() -> Result<()> {
                      "ocr_dpi": provider.dpi,
                      "ocr_concurrency": provider.ocr_concurrency,
                      "ocr_languages": provider.languages,
-                    "tessdata_prefix": std::env::var("TESSDATA_PREFIX").ok()
+                    "tessdata_prefix": provider.tessdata_prefix().map(|path| path.to_string_lossy().into_owned()),
+                    "tessdata_override": std::env::var("READTRACE_TESSDATA_PREFIX").ok()
                 }))?,
                 &output_format,
             )?;

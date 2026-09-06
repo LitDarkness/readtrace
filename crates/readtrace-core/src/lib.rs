@@ -4714,6 +4714,12 @@ impl TesseractOcrProvider {
                 .unwrap_or(4),
         }
     }
+
+    /// The language-data directory selected for this provider, after taking
+    /// bundled release data and explicit overrides into account.
+    pub fn tessdata_prefix(&self) -> Option<PathBuf> {
+        effective_tessdata(&self.tesseract_bin)
+    }
 }
 
 fn resolve_pdfinfo_binary() -> String {
@@ -4792,6 +4798,29 @@ fn sibling_tessdata(binary: &str) -> Option<PathBuf> {
         .map(|parent| parent.join("tessdata"))
         .filter(|path| path.is_dir())
 }
+
+/// Return the tessdata directory that should be used for this invocation.
+///
+/// Release archives carry their own language data next to the bundled
+/// Tesseract executable.  That copy must win over a stale global
+/// `TESSDATA_PREFIX` (for example a Homebrew path left in a user's shell), or
+/// a self-contained release can silently use the wrong language files.  The
+/// explicit `READTRACE_TESSDATA_PREFIX` variable remains available for users
+/// who intentionally want to override the bundled data.
+fn effective_tessdata(binary: &str) -> Option<PathBuf> {
+    if let Ok(value) = std::env::var("READTRACE_TESSDATA_PREFIX") {
+        if !value.trim().is_empty() {
+            return Some(PathBuf::from(value));
+        }
+    }
+    sibling_tessdata(binary).or_else(|| {
+        std::env::var("TESSDATA_PREFIX")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+    })
+}
+
 #[async_trait]
 impl OcrProvider for TesseractOcrProvider {
     async fn extract(&self, source: &SourceFile, path: &Path) -> Result<Vec<OcrPage>> {
@@ -5044,10 +5073,8 @@ impl TesseractOcrProvider {
             .arg("tsv")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        if std::env::var_os("TESSDATA_PREFIX").is_none() {
-            if let Some(tessdata) = sibling_tessdata(&self.tesseract_bin) {
-                command.env("TESSDATA_PREFIX", tessdata);
-            }
+        if let Some(tessdata) = effective_tessdata(&self.tesseract_bin) {
+            command.env("TESSDATA_PREFIX", tessdata);
         }
         let output = command
             .output()
@@ -5099,6 +5126,22 @@ impl TesseractOcrProvider {
             .map(|b| b.text.as_str())
             .collect::<Vec<_>>()
             .join("\n");
+        if raw.trim().is_empty() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            return Err(anyhow!(
+                "tesseract returned no recognized text for {} (language={}, tessdata={}); check the image, language data, and OCR paths{}",
+                path.display(),
+                self.languages,
+                effective_tessdata(&self.tesseract_bin)
+                    .map(|value| value.display().to_string())
+                    .unwrap_or_else(|| "<PATH/default>".into()),
+                if stderr.is_empty() {
+                    String::new()
+                } else {
+                    format!("; stderr: {stderr}")
+                }
+            ));
+        }
         Ok(OcrPage {
             page_id: format!("{}-p{}", source.source_id, page_number),
             source_id: source.source_id.clone(),
@@ -5377,6 +5420,7 @@ impl OpenAiCompatibleProvider {
         report.request_id = response
             .headers()
             .get("x-request-id")
+            .or_else(|| response.headers().get("request-id"))
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned);
         let status = response.status();
@@ -5389,18 +5433,37 @@ impl OpenAiCompatibleProvider {
             }
         };
         if !status.is_success() {
-            report.error = Some(format!("HTTP status {}", status.as_u16()));
             // Keep a short provider response preview for actionable diagnostics
             // (never the request headers or API key).  Gateways commonly put
             // the rejected field name in this body, which is essential when
             // adapting GLM/OpenAI-compatible payloads.
-            report.response_preview = Some(body.chars().take(240).collect());
+            let preview = body
+                .chars()
+                .take(240)
+                .collect::<String>()
+                .replace("sk-", "[redacted]-");
+            report.response_preview = Some(preview.clone());
+            report.error = Some(format!(
+                "HTTP status {}{}: {}",
+                status.as_u16(),
+                report
+                    .request_id
+                    .as_deref()
+                    .map(|value| format!(", request_id={value}"))
+                    .unwrap_or_default(),
+                if preview.trim().is_empty() {
+                    "(empty response body)"
+                } else {
+                    preview.trim()
+                }
+            ));
             report.elapsed_ms = started.elapsed().as_millis();
             return report;
         }
         let value: serde_json::Value = match serde_json::from_str(&body) {
             Ok(value) => value,
             Err(error) => {
+                report.response_preview = Some(body.chars().take(240).collect());
                 report.error = Some(format!("invalid JSON response: {error}"));
                 report.elapsed_ms = started.elapsed().as_millis();
                 return report;
@@ -5513,6 +5576,61 @@ impl OpenAiCompatibleProvider {
         serde_json::Value::Object(payload)
     }
 }
+
+/// Read a provider response once and retain the useful part of an error body.
+/// `reqwest::error_for_status` only keeps the numeric status, which made an
+/// invalid key, model, or payload look identical in the Web UI.  Gateways
+/// commonly return the exact rejected field in JSON, so keep a bounded,
+/// redacted preview for the task ledger and the human-facing error message.
+async fn provider_json_response(response: reqwest::Response) -> Result<serde_json::Value> {
+    let status = response.status();
+    let request_id = response
+        .headers()
+        .get("x-request-id")
+        .or_else(|| response.headers().get("request-id"))
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let body = response
+        .text()
+        .await
+        .context("could not read provider response body")?;
+    let preview = body
+        .chars()
+        .take(2_000)
+        .collect::<String>()
+        .replace("sk-", "[redacted]-");
+    if !status.is_success() {
+        let request = request_id
+            .as_deref()
+            .map(|value| format!(", request_id={value}"))
+            .unwrap_or_default();
+        return Err(anyhow!(
+            "provider HTTP {}{}: {}",
+            status.as_u16(),
+            request,
+            if preview.trim().is_empty() {
+                "(empty response body)"
+            } else {
+                preview.trim()
+            }
+        ));
+    }
+    serde_json::from_str(&body).with_context(|| {
+        format!(
+            "provider returned invalid JSON{}: {}",
+            request_id
+                .as_deref()
+                .map(|value| format!(", request_id={value}"))
+                .unwrap_or_default(),
+            if preview.trim().is_empty() {
+                "(empty response body)"
+            } else {
+                preview.trim()
+            }
+        )
+    })
+}
+
 #[async_trait]
 impl LlmProvider for OpenAiCompatibleProvider {
     async fn repair_page(
@@ -5530,12 +5648,13 @@ impl LlmProvider for OpenAiCompatibleProvider {
             true,
             self.config.context_limit,
         );
-        let value: serde_json::Value = self
-            .request(&payload)?
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
+        let value =
+            provider_json_response(self.request(&payload)?.send().await.with_context(|| {
+                format!(
+                    "provider request failed for {}",
+                    self.config.chat_completions_url().unwrap_or_default()
+                )
+            })?)
             .await?;
         let content = message_content(&value["choices"][0]["message"]["content"]);
         let mut response = repair_response_from_text(
@@ -5559,8 +5678,14 @@ impl LlmProvider for OpenAiCompatibleProvider {
             ]),
             true,
         );
-        let response = self.request(&payload)?.send().await?.error_for_status()?;
-        let value: serde_json::Value = response.json().await?;
+        let value =
+            provider_json_response(self.request(&payload)?.send().await.with_context(|| {
+                format!(
+                    "provider request failed for {}",
+                    self.config.chat_completions_url().unwrap_or_default()
+                )
+            })?)
+            .await?;
         let content = message_content(&value["choices"][0]["message"]["content"]);
         correction_response_from_text(
             page,
@@ -5612,12 +5737,13 @@ impl LlmProvider for OpenAiCompatibleProvider {
             "content": format!("问题：{query}\n<evidence>\n{evidence}\n</evidence>")
         }));
         let payload = self.payload(serde_json::Value::Array(messages), false);
-        let value: serde_json::Value = self
-            .request(&payload)?
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
+        let value =
+            provider_json_response(self.request(&payload)?.send().await.with_context(|| {
+                format!(
+                    "provider request failed for {}",
+                    self.config.chat_completions_url().unwrap_or_default()
+                )
+            })?)
             .await?;
         let answer = message_content(&value["choices"][0]["message"]["content"]);
         let answer = if answer.is_empty() {

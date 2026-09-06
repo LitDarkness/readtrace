@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, Multipart, Path, Query, State},
@@ -604,8 +604,31 @@ pub async fn run(project: PathBuf, bind: &str) -> Result<()> {
         .route("/api/budget", get(budget).post(save_budget))
         .route("/api/events", get(events))
         .with_state(state);
-    let addr: SocketAddr = bind.parse()?;
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let requested: SocketAddr = bind.parse()?;
+    let listener = match tokio::net::TcpListener::bind(requested).await {
+        Ok(listener) => listener,
+        Err(error) if requested.ip().is_loopback() && requested.port() != 0 => {
+            // Windows may reserve a loopback port for Hyper-V/WSL (WSA 10013)
+            // even when no process is listening.  A fixed fallback is just as
+            // likely to be reserved, so ask the OS for the next free port and
+            // print the actual URL below.  The explicit --bind option still
+            // wins whenever the requested port is available.
+            eprintln!(
+                "ReadTrace could not bind http://{requested} ({error}); trying an available loopback port"
+            );
+            tokio::net::TcpListener::bind(SocketAddr::new(requested.ip(), 0))
+                .await
+                .with_context(|| {
+                    format!(
+                        "could not bind requested address {requested}, and automatic loopback fallback failed"
+                    )
+                })?
+        }
+        Err(error) => {
+            return Err(error).with_context(|| format!("could not bind http://{requested}"))
+        }
+    };
+    let addr = listener.local_addr()?;
     println!("ReadTrace Web listening on http://{}", addr);
     axum::serve(listener, app).await?;
     Ok(())
@@ -1421,6 +1444,7 @@ async fn check_provider(
         .map(|error| error.to_string());
     Json(serde_json::json!({
         "ok": report.ok,
+        "error": report.error.clone(),
         "profile": provider_view(&profile),
         "report": report,
         "ledger_call_id": call.call_id,
@@ -2169,7 +2193,8 @@ async fn propose(
                         error_count,
                         Some(serde_json::json!({
                             "repaired_pages": repaired_pages,
-                            "errors": error_count
+                            "errors": error_count,
+                            "error_details": run.errors
                         })),
                     )
                     .await

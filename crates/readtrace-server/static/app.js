@@ -26,8 +26,27 @@ const state = {
 };
 const titles = { overview: '工作台', files: '文件浏览', import: '导入队列', process: '处理批次', backend: '后台', providers: '来源与 API', search: '检索', reader: '阅读与问答' };
 const pretty = (value) => JSON.stringify(value, null, 2);
-const api = async (url) => (await fetch(url)).json();
-const post = async (url, body) => (await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
+async function requestJson(url, options = {}) {
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch (error) {
+    return { ok: false, error: `无法连接 Web 服务：${error.message || error}` };
+  }
+  const text = await response.text();
+  let result;
+  try {
+    result = text ? JSON.parse(text) : {};
+  } catch (_) {
+    return { ok: false, error: `Web 服务返回了无法解析的响应（HTTP ${response.status}）：${text.slice(0, 500)}` };
+  }
+  if (!response.ok && result.ok !== false) {
+    return { ...result, ok: false, error: result.error || `请求失败（HTTP ${response.status}）` };
+  }
+  return result;
+}
+const api = async (url) => requestJson(url);
+const post = async (url, body) => requestJson(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 const uploadFiles = async (files, options = {}) => {
   const form = new FormData();
   form.append('mode', options.mode || 'generic');
@@ -194,9 +213,9 @@ async function loadActivity() { const result = await api('/api/activity'); if (!
 async function saveBudget() { const tokenValue = Number.parseInt($('tokenBudgetInput')?.value || '', 10); const costValue = Number.parseFloat($('costBudgetInput')?.value || ''); const result = await post('/api/budget', { max_total_tokens: Number.isFinite(tokenValue) && tokenValue > 0 ? tokenValue : null, max_cost_usd: Number.isFinite(costValue) && costValue > 0 ? costValue : null }); if (!result.ok) return toast(result.error || '预算保存失败', true); $('budgetStatus').textContent = '已保存'; setTimeout(() => { if ($('budgetStatus')) $('budgetStatus').textContent = ''; }, 2200); await loadActivity(); }
 async function loadUsage() { const result = await api('/api/usage'); const summary = result.summary || result; $('costCount').textContent = typeof summary.cost_usd === 'number' ? summary.cost_usd.toFixed(6) : '—'; if ($('usageOut')) show('usageOut', summary); }
 async function refresh() { await Promise.all([loadWorkspace(), loadBatches(), loadFiles(), loadUnits(), loadUsage(), loadTasks()]); if ($('view-backend').classList.contains('active')) await loadActivity(); }
-async function waitTask(taskId) { for (let attempt = 0; attempt < 180; attempt += 1) { const result = await api(`/api/tasks/${encodeURIComponent(taskId)}`); if (result.task && result.task.status !== 'running') return result.task; await new Promise((resolve) => setTimeout(resolve, 1000)); } throw new Error('任务等待超时'); }
-async function runQueuedPipeline(batchId, item) { const ocr = await post('/api/ocr', { batch_id: batchId, provider: item.ocr }); if (!ocr.ok) throw new Error(ocr.error); const ocrTask = await waitTask(ocr.task_id); if (ocrTask.status !== 'completed') throw new Error(ocrTask.error || 'OCR 失败'); const normalized = await post('/api/normalize', { batch_id: batchId }); if (!normalized.ok) throw new Error(normalized.error); const repair = await post('/api/repair', { batch_id: batchId, provider: item.provider, speed: item.speed, ...(item.model ? { model: item.model } : {}) }); if (!repair.ok) throw new Error(repair.error); const repairTask = await waitTask(repair.task_id); if (repairTask.status !== 'completed') throw new Error(repairTask.error || 'LLM 修复失败'); const merged = await post('/api/merge', { batch_id: batchId, confirm: true }); if (!merged.ok) throw new Error(merged.error); return merged; }
-function renderQueue() { const box = $('importQueue'); $('queueCount').textContent = state.queue.length; $('queueRun').disabled = !state.queue.length; box.replaceChildren(); if (!state.queue.length) { box.className = 'queue-list empty-state'; box.textContent = '还没有待导入素材'; return; } box.className = 'queue-list'; state.queue.forEach((item, index) => { const row = document.createElement('div'); row.className = 'queue-item'; const clean = item.cleanName ? ` · clean/${item.cleanName}/document.md` : ''; const title = item.uploadFiles?.length ? `本地选择 · ${item.uploadFiles.length} 个文件` : item.path; const detail = item.uploadFiles?.length ? item.uploadFiles.map((file) => file.webkitRelativePath || file.name).slice(0, 2).join('、') : item.path; row.innerHTML = `<span class="queue-index">${String(index + 1).padStart(2, '0')}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)} · ${item.mode} · ${item.copy ? '复制原素材' : '外部引用'}${escapeHtml(clean)}</small></span>`; const remove = document.createElement('button'); remove.className = 'icon-button'; remove.textContent = '×'; remove.onclick = () => { state.queue.splice(index, 1); renderQueue(); }; row.append(remove); box.append(row); }); }
+async function waitTask(taskId) { for (let attempt = 0; attempt < 180; attempt += 1) { const result = await api(`/api/tasks/${encodeURIComponent(taskId)}`); if (result.task && result.task.status !== 'running') { const task = result.task; if (task.status !== 'completed') { const detail = task.result ? `\n${pretty(task.result)}` : ''; throw new Error(`${task.error || '任务未完成'}${detail}`); } return task; } await new Promise((resolve) => setTimeout(resolve, 1000)); } throw new Error('任务等待超时；请打开“后台”查看任务详情'); }
+async function runQueuedPipeline(batchId, item) { const ocr = await post('/api/ocr', { batch_id: batchId, provider: item.ocr }); if (!ocr.ok) throw new Error(ocr.error); await waitTask(ocr.task_id); const normalized = await post('/api/normalize', { batch_id: batchId }); if (!normalized.ok) throw new Error(normalized.error); const profile = providerById(item.provider); const repair = await post('/api/repair', { batch_id: batchId, profile_id: profile?.id || item.provider, provider: profile?.kind, speed: item.thinking || item.speed, ...(item.model ? { model: item.model } : {}) }); if (!repair.ok) throw new Error(repair.error); await waitTask(repair.task_id); const merged = await post('/api/merge', { batch_id: batchId, confirm: true, clean_name: item.cleanName || undefined }); if (!merged.ok) throw new Error(merged.error); return merged; }
+function renderQueue() { const box = $('importQueue'); $('queueCount').textContent = state.queue.length; $('queueRun').disabled = !state.queue.length; if ($('queueProcessAll')) $('queueProcessAll').disabled = !state.queue.length; box.replaceChildren(); if (!state.queue.length) { box.className = 'queue-list empty-state'; box.textContent = '还没有待导入素材'; return; } box.className = 'queue-list'; state.queue.forEach((item, index) => { const row = document.createElement('div'); row.className = 'queue-item'; const clean = item.cleanName ? ` · clean/${item.cleanName}/document.md` : ''; const title = item.uploadFiles?.length ? `本地选择 · ${item.uploadFiles.length} 个文件` : item.path; const detail = item.uploadFiles?.length ? item.uploadFiles.map((file) => file.webkitRelativePath || file.name).slice(0, 2).join('、') : item.path; row.innerHTML = `<span class="queue-index">${String(index + 1).padStart(2, '0')}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)} · ${item.mode} · ${item.copy ? '复制原素材' : '外部引用'}${escapeHtml(clean)}</small></span>`; const remove = document.createElement('button'); remove.className = 'icon-button'; remove.textContent = '×'; remove.onclick = () => { state.queue.splice(index, 1); renderQueue(); }; row.append(remove); box.append(row); }); }
 async function runQueue() { if (!state.queue.length) return; const items = [...state.queue]; state.queue = []; renderQueue(); const results = []; let previewBatch = null; for (const item of items) { try { const result = await post('/api/import', { path: item.path, mode: item.mode, no_copy: !item.copy }); if (!result.ok) throw new Error(result.error); const batchId = result.batch.batch_id; results.push(batchId); if (item.merge === 'auto') await runQueuedPipeline(batchId, item); if (item.merge === 'preview' && !previewBatch) previewBatch = batchId; toast(`已导入 ${batchId}`); } catch (error) { results.push(`失败：${error.message}`); toast(error.message, true); } } show('importOut', { batches: results }); await refresh(); const first = results.find((value) => !value.startsWith('失败')); if (previewBatch || ($('afterImport').value === 'process' && first)) { $('batch').value = previewBatch || first; go('process'); } else go('files'); }
 async function processOcr() { const batch = selectedBatch(); if (!batch) return; setProcessStatus('OCR 启动中…', 'running'); const result = await post('/api/ocr', { batch_id: batch, provider: $('ocrProvider').value }); show('processOut', result); if (result.ok) { setProcessStatus('OCR 处理中…', 'running', '', result.task_id); toast('OCR 已开始'); loadTasks(); } else { setProcessStatus('OCR 启动失败', 'failed', result.error || ''); toast(result.error, true); } }
 async function processNormalize() { const batch = selectedBatch(); if (!batch) return; setProcessStatus('规范化处理中…', 'running'); const result = await post('/api/normalize', { batch_id: batch, refresh: true }); show('processOut', result); if (result.ok) { const changed = (result.report?.pages || []).reduce((sum, page) => sum + (page.changes?.length || 0), 0); setProcessStatus('规范化已完成', 'completed', `${changed} 处确定性修改`); toast('确定性清洗完成'); } else { setProcessStatus('规范化失败', 'failed', result.error || ''); toast(result.error, true); } }
@@ -212,8 +231,40 @@ function ensureUnitsOption() { const dock = $('mergeDock'); if (!dock || $('allo
 function wireCleanPublish() { const button = $('build'); if (!button) return; button.onclick = async () => { const batch = selectedBatch(); if (!batch) return; const meta = state.batches.find((item) => item.batch_id === batch); if ((meta?.source_files?.length || 0) > 1) return processMerge(false); const allowUnrepaired = $('allowUnrepaired')?.checked || false; const cleanName = $('cleanName')?.value.trim() || undefined; const result = await post('/api/build', { batch_id: batch, allow_unrepaired: allowUnrepaired, clean_name: cleanName }); show('processOut', result); if (result.ok) { const warning = result.warning || (allowUnrepaired ? '本次使用了未修复 OCR' : ''); setProcessStatus(warning ? 'revision 已生成（含未修复 OCR）' : 'revision 已生成', warning ? 'warning' : 'completed', result.clean_path || result.artifact?.path || warning); toast(result.clean_path ? `已发布到 ${result.clean_path}` : (warning || 'revision 已生成')); await refresh(); } else { setProcessStatus('生成失败', 'failed', result.error || ''); toast(result.error, true); } }; }
 const originalTerminalLine = terminalLine;
 terminalLine = function resolvedTerminalLine(event, sequence, taskOutcomes = state.taskOutcomes) { const line = originalTerminalLine(event, sequence, taskOutcomes); if (event.type === 'task_started' && line.status === 'RUNNING') line.status = 'INFO'; if (event.type === 'progress' && line.status === 'RUNNING') { line.status = 'INFO'; line.tone = 'neutral'; } return line; };
+renderProcessStatus = function persistedProcessStatus(tasks) {
+  const batchId = $('batch')?.value;
+  const meta = state.batches.find((item) => item.batch_id === batchId);
+  const relevant = (tasks || []).filter((task) => !batchId || task.batch_id === batchId).sort((a, b) => new Date(a.updated_at || 0) - new Date(b.updated_at || 0));
+  const latest = relevant.at(-1);
+  const running = latest?.status === 'running' ? latest : null;
+  if (running) {
+    const label = running.kind === 'ocr' ? 'OCR' : running.kind === 'repair' ? 'LLM 修复' : running.kind;
+    setProcessStatus(`${label} 处理中…`, 'running', `${running.current || 0}/${running.total || '—'} · ${running.message || ''}`, running.task_id);
+    return;
+  }
+  const failed = latest?.status === 'failed' || latest?.status === 'completed_with_errors' ? latest : null;
+  if (failed) {
+    const label = failed.kind === 'ocr' ? 'OCR' : failed.kind === 'repair' ? 'LLM 修复' : failed.kind;
+    const tone = failed.status === 'completed_with_errors' ? 'warning' : 'failed';
+    const detail = failed.error || (failed.result ? pretty(failed.result) : '请打开后台查看详情');
+    setProcessStatus(`${label} ${failed.status === 'completed_with_errors' ? '完成但有错误' : '失败'}`, tone, detail, failed.task_id);
+    return;
+  }
+  const persisted = {
+    imported: ['等待处理', 'idle'],
+    ocr_complete: ['OCR 已完成', 'completed'],
+    normalized: ['规范化已完成', 'completed'],
+    repair_complete: ['LLM 修复已完成', 'completed'],
+    repaired: ['LLM 修复已完成', 'completed'],
+    built: ['revision 已生成', 'completed'],
+    applied: ['修订已应用', 'completed'],
+  }[meta?.status];
+  if (persisted) setProcessStatus(persisted[0], persisted[1], '批次状态已从 Vault 恢复');
+  else setProcessStatus(batchId ? '等待处理' : '选择批次后开始处理', 'idle');
+};
 async function syncTaskOutcomes() { const result = await api('/api/tasks'); (result.tasks || []).forEach((task) => { state.taskOutcomes[task.task_id] = task.status === 'running' ? 'running' : task.status === 'cancelled' ? 'cancelled' : task.status === 'failed' || task.status === 'completed_with_errors' ? 'failed' : 'completed'; }); }
 ensureUnitsOption(); wire(); wireCleanPublish(); renderQueue(); refresh(); syncTaskOutcomes(); setInterval(loadTasks, 2500); setInterval(loadActivity, 3000); setInterval(syncTaskOutcomes, 2500);
+$('batch')?.addEventListener('change', () => loadTasks());
 
 // Reader enhancements: keep the existing compact page markup, but turn its
 // result panel into a small conversation surface.  These overrides are kept
@@ -1174,9 +1225,17 @@ runQueue = async function enhancedRunQueue() {
     $('batch').value = previewBatch || first;
     $('cleanName').value = firstCleanName;
     go('process');
+    await loadTasks();
   } else go('files');
 };
 $('queueRun').onclick = runQueue;
+if ($('queueProcessAll')) $('queueProcessAll').onclick = () => {
+  if (!state.queue.length) return toast('先把素材加入队列', true);
+  $('afterImport').value = 'process';
+  state.queue = state.queue.map((item) => ({ ...item, merge: 'auto' }));
+  toast('一键处理已开始：导入、OCR、规范化、LLM 修复并发布 clean');
+  runQueue();
+};
 mergeUnits = async function enhancedMergeUnits(confirm) {
   if (!confirm && state.selectedUnits.size < 1) return toast('至少选择一个 source 或 clean 单元', true);
   const allowUnrepaired = $('allowUnrepaired')?.checked || $('allowUnrepairedUnits')?.checked || false;

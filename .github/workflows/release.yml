@@ -28,6 +28,8 @@ jobs:
           cargo fmt --all -- --check
           cargo test --workspace
           cargo clippy --workspace --all-targets -- -D warnings
+          node --check crates/readtrace-server/static/app.js
+          bash -n scripts/package-release-macos.sh
 
   windows:
     name: Package Windows x86_64
@@ -159,6 +161,37 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
         run: bash scripts/package-release-macos.sh
+
+      - name: Smoke-test extracted macOS archive
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          archive="$(find dist -maxdepth 1 -type f -name 'readtrace-*-macos-arm64.tar.gz' -print -quit)"
+          if [[ -z "$archive" ]]; then
+            echo "macOS archive was not produced" >&2
+            exit 1
+          fi
+
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "$smoke_dir"' EXIT
+          tar -xzf "$archive" -C "$smoke_dir"
+
+          (
+            cd "$smoke_dir"
+            env \
+              -u READTRACE_TESSERACT_BIN \
+              -u READTRACE_PDFTOPPM_BIN \
+              -u READTRACE_PDFINFO_BIN \
+              -u READTRACE_TESSDATA_PREFIX \
+              -u TESSDATA_PREFIX \
+              ./readtrace --format json ocr-check | tee ocr-check.json
+          )
+
+          grep -Fq '"tesseract_available": true' "$smoke_dir/ocr-check.json"
+          grep -Fq '"pdftoppm_available": true' "$smoke_dir/ocr-check.json"
+          grep -Fq '"pdfinfo_available": true' "$smoke_dir/ocr-check.json"
+          grep -Fq 'tools/tesseract/tessdata' "$smoke_dir/ocr-check.json"
 
       - name: Upload macOS archive
         uses: actions/upload-artifact@v4

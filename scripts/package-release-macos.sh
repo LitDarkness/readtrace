@@ -14,6 +14,7 @@ ARCHIVE="$DIST_ROOT/readtrace-$VERSION-macos-arm64.tar.gz"
 
 TARGET="aarch64-apple-darwin"
 TESSDATA_REF="${TESSDATA_REF:-4.1.0}"
+TESSDATA_ROOT="${TESSDATA_ROOT:-}"
 
 cd "$PROJECT_ROOT"
 
@@ -230,14 +231,17 @@ mkdir -p "$STAGE/tools/tesseract/tessdata"
 
 for language in chi_sim eng; do
   destination="$STAGE/tools/tesseract/tessdata/$language.traineddata"
-
-  curl \
-    --fail \
-    --location \
-    --silent \
-    --show-error \
-    "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/$TESSDATA_REF/$language.traineddata" \
-    -o "$destination"
+  if [[ -n "$TESSDATA_ROOT" && -f "$TESSDATA_ROOT/$language.traineddata" ]]; then
+    cp "$TESSDATA_ROOT/$language.traineddata" "$destination"
+  else
+    curl \
+      --fail \
+      --location \
+      --silent \
+      --show-error \
+      "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/$TESSDATA_REF/$language.traineddata" \
+      -o "$destination"
+  fi
 done
 
 
@@ -372,6 +376,27 @@ grep -Fxq \
   /tmp/readtrace-tesseract-langs.txt
 
 rm -f /tmp/readtrace-tesseract-langs.txt
+
+# Run the packaged CLI from its own directory with project OCR overrides
+# removed.  This catches the most common portable-release regression: the
+# binary accidentally resolving a Homebrew/system Tesseract or tessdata path
+# instead of the copies shipped in this archive.
+(
+  cd "$STAGE"
+  env \
+    -u READTRACE_TESSERACT_BIN \
+    -u READTRACE_PDFTOPPM_BIN \
+    -u READTRACE_PDFINFO_BIN \
+    -u READTRACE_TESSDATA_PREFIX \
+    -u TESSDATA_PREFIX \
+    ./readtrace --format json ocr-check > /tmp/readtrace-ocr-check.json
+)
+
+grep -Fq '"tesseract_available": true' /tmp/readtrace-ocr-check.json
+grep -Fq '"pdftoppm_available": true' /tmp/readtrace-ocr-check.json
+grep -Fq '"pdfinfo_available": true' /tmp/readtrace-ocr-check.json
+grep -Fq 'tools/tesseract/tessdata' /tmp/readtrace-ocr-check.json
+rm -f /tmp/readtrace-ocr-check.json
 
 
 #

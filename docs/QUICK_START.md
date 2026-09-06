@@ -121,6 +121,8 @@ READTRACE_OCR_CONCURRENCY=4
 
 macOS 通常不需要 TESSDATA_PREFIX；只有 ocr-check 找不到 chi_sim 时才填写实际语言目录。
 
+从 Release 压缩包首次运行 macOS Apple Silicon 版本时，当前包是 ad-hoc 签名。确认下载来源可信后，在解压目录执行一次 `xattr -dr com.apple.quarantine "$PWD"`，再运行 `./readtrace ocr-check`。以后不必重复执行；未来完成 Developer ID 签名和 notarization 后可移除该步骤。
+
 ## 4. 构建项目
 
 ~~~console
@@ -146,13 +148,15 @@ cargo run --quiet -p readtrace-cli -- serve ./workspace --bind 127.0.0.1:8787
 cargo run --quiet -p readtrace-cli -- serve ./workspace --bind 127.0.0.1:8788
 ~~~
 
+Windows 某些机器会把 8787 保留给 Hyper-V/WSL，即使没有进程监听也会报 `os error 10013`。现在服务会自动申请一个可用的回环端口，并把最终地址打印到终端；也可以直接显式指定一个未被占用的端口。
+
 ### 5.1 在 GUI 中完成第一轮
 
 1. 左侧选择 Workspace 和 Vault。
 2. 打开“来源与 API”。不配置 Key 时，选择 Mock；需要真实修复时，再添加 HTTP profile，填 Base URL、模型和 Key 环境变量。
 3. 打开“导入”，选择一个 PDF、Markdown、TXT 或图片文件；也可以选择文件夹。
 4. 设置是否复制原素材、clean 发布名称、OCR Provider、LLM Provider 和推理挡位。
-5. 启动任务后，在“处理批次”查看 OCR、normalize、repair、build 的完成、失败、页数和 warning。后台页会显示任务事件、Token 和美元费用。
+5. 加入队列后有两种路径：点击“**一键导入并处理**”会按顺序完成导入、OCR、规范化、LLM 修复并发布到 clean；如果要逐步审查，点击“开始导入全部”，再到“处理批次”按 OCR → 规范化 → LLM 修复 → 生成文件执行。处理批次页会显示完成、失败、页数和 warning，后台页会显示任务事件、Token 和美元费用。
 6. 到“文件浏览”打开 clean 下的 Markdown。它可以直接编辑和保存；保存后索引会刷新。
 7. 到“检索”搜索 clean 内容。检索不调用 LLM。
 8. 到“阅读与问答”新建会话，点击“添加引用”，在 clean 文件树中多选文件，再提问。问答只使用 clean 证据。
