@@ -244,6 +244,30 @@ for language in chi_sim eng; do
   fi
 done
 
+# ReadTrace asks Tesseract for TSV output. The `tsv` argument is a config
+# file, not a built-in output switch, so language models alone are not enough
+# for a portable package.
+mkdir -p "$STAGE/tools/tesseract/tessdata/configs"
+tsv_destination="$STAGE/tools/tesseract/tessdata/configs/tsv"
+
+for candidate in \
+  "${TESSDATA_ROOT:+$TESSDATA_ROOT/configs/tsv}" \
+  "$TESSERACT_PREFIX/share/tessdata/configs/tsv" \
+  "$BREW_PREFIX/share/tessdata/configs/tsv"
+do
+  if [[ -n "$candidate" && -f "$candidate" ]]; then
+    cp "$candidate" "$tsv_destination"
+    break
+  fi
+done
+
+# The canonical Tesseract TSV config is a single parameter. Keep this
+# fallback so a Homebrew layout change cannot silently produce a broken
+# archive.
+if [[ ! -f "$tsv_destination" ]]; then
+  printf 'tessedit_create_tsv 1\n' > "$tsv_destination"
+fi
+
 
 for language in chi_sim eng; do
   if [[ ! -f "$STAGE/tools/tesseract/tessdata/$language.traineddata" ]]; then
@@ -375,6 +399,11 @@ grep -Fxq \
   'chi_sim' \
   /tmp/readtrace-tesseract-langs.txt
 
+test -f "$STAGE/tools/tesseract/tessdata/configs/tsv"
+grep -Fxq \
+  'tessedit_create_tsv 1' \
+  "$STAGE/tools/tesseract/tessdata/configs/tsv"
+
 rm -f /tmp/readtrace-tesseract-langs.txt
 
 # Run the packaged CLI from its own directory with project OCR overrides
@@ -396,6 +425,8 @@ grep -Fq '"tesseract_available": true' /tmp/readtrace-ocr-check.json
 grep -Fq '"pdftoppm_available": true' /tmp/readtrace-ocr-check.json
 grep -Fq '"pdfinfo_available": true' /tmp/readtrace-ocr-check.json
 grep -Fq 'tools/tesseract/tessdata' /tmp/readtrace-ocr-check.json
+grep -Fq '"tsv_config_available": true' /tmp/readtrace-ocr-check.json
+grep -Fq '"tsv_output_available": true' /tmp/readtrace-ocr-check.json
 rm -f /tmp/readtrace-ocr-check.json
 
 

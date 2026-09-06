@@ -192,6 +192,8 @@ jobs:
           grep -Fq '"pdftoppm_available": true' "$smoke_dir/ocr-check.json"
           grep -Fq '"pdfinfo_available": true' "$smoke_dir/ocr-check.json"
           grep -Fq 'tools/tesseract/tessdata' "$smoke_dir/ocr-check.json"
+          grep -Fq '"tsv_config_available": true' "$smoke_dir/ocr-check.json"
+          grep -Fq '"tsv_output_available": true' "$smoke_dir/ocr-check.json"
 
       - name: Upload macOS archive
         uses: actions/upload-artifact@v4

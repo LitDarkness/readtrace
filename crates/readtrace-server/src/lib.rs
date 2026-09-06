@@ -2028,6 +2028,11 @@ fn safe_upload_relative_path(raw: &str) -> Result<PathBuf> {
     }
     Ok(safe)
 }
+
+fn detailed_error(error: &anyhow::Error) -> String {
+    format!("{error:#}")
+}
+
 async fn ocr(
     State(state): State<AppState>,
     Json(req): Json<BatchRequest>,
@@ -2077,12 +2082,13 @@ async fn ocr(
                     .await
             }
             Err(error) => {
+                let detail = detailed_error(&error);
                 if !worker_token.is_cancelled() {
                     let _ = project.append_event(&AgentEvent::Error {
-                        message: error.to_string(),
+                        message: detail.clone(),
                     });
                 }
-                tasks.fail(&worker_task_id, error.to_string()).await
+                tasks.fail(&worker_task_id, detail).await
             }
         }
     });
@@ -2716,8 +2722,8 @@ fn llm_config(
 #[cfg(test)]
 mod tests {
     use super::{
-        llm_config, resolve_provider_request, safe_upload_relative_path, AgentEvent, AppState,
-        TaskRegistry,
+        detailed_error, llm_config, resolve_provider_request, safe_upload_relative_path,
+        AgentEvent, AppState, TaskRegistry,
     };
     use readtrace_core::{LlmBackend, ProjectStore};
     use std::sync::Arc;
@@ -2778,6 +2784,16 @@ mod tests {
         assert!(safe_upload_relative_path("C:outside.txt").is_err());
         assert!(safe_upload_relative_path("/tmp/outside.txt").is_err());
         assert!(safe_upload_relative_path(r"\\server\share\outside.txt").is_err());
+    }
+
+    #[test]
+    fn web_ocr_error_keeps_the_tesseract_cause_chain() {
+        let error = anyhow::anyhow!("read_params_file: Can't open tsv")
+            .context("tesseract returned no recognized text")
+            .context("OCR failed for sources/example.png");
+        let detail = detailed_error(&error);
+        assert!(detail.contains("OCR failed for sources/example.png"));
+        assert!(detail.contains("Can't open tsv"));
     }
 
     #[tokio::test]

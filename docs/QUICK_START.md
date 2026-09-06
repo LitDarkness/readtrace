@@ -213,6 +213,7 @@ cargo run --quiet -p readtrace-cli -- build ./workspace/vaults/default <batch_id
 | --- | --- |
 | tesseract not found | 在 .env 填 READTRACE_TESSERACT_BIN，重跑 ocr-check |
 | chi_sim 缺失 | Windows 把 chi_sim.traineddata 放进 tessdata；macOS 安装 tesseract-lang |
+| `Can't open tsv` | Tesseract 的 `tessdata/configs/tsv` 缺失；新版 Release 已内置并由 `ocr-check` 实际验证 |
 | PDF 无法读取页数 | 同时检查 pdfinfo 和 pdftoppm，不能只安装 Tesseract |
 | 只能使用 Mock | 先在 GUI 添加 HTTP profile，或检查 API Key 环境变量 |
 | Codex CLI 拒绝访问/找不到命令 | 在普通终端验证 codex；不具备 CLI 时改用 HTTP 或 Mock |

@@ -4720,6 +4720,69 @@ impl TesseractOcrProvider {
     pub fn tessdata_prefix(&self) -> Option<PathBuf> {
         effective_tessdata(&self.tesseract_bin)
     }
+
+    /// Verify the exact output mode used by ReadTrace. Merely running
+    /// `tesseract --version` is insufficient because the executable can be
+    /// healthy while `tessdata/configs/tsv` is absent from a release archive.
+    pub async fn verify_tsv_output(&self) -> Result<()> {
+        let input = std::env::temp_dir().join(format!(
+            "readtrace-tesseract-tsv-probe-{}.pgm",
+            Uuid::new_v4()
+        ));
+        let mut image = b"P5\n300 100\n255\n".to_vec();
+        image.resize(image.len() + 300 * 100, 255);
+        fs::write(&input, image)
+            .with_context(|| format!("could not create OCR probe image: {}", input.display()))?;
+
+        let mut command = Command::new(&self.tesseract_bin);
+        command
+            .arg(&input)
+            .arg("stdout")
+            .arg("-l")
+            .arg(&self.languages)
+            .arg("--psm")
+            .arg("6")
+            .arg("tsv")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        if let Some(tessdata) = effective_tessdata(&self.tesseract_bin) {
+            command.env("TESSDATA_PREFIX", tessdata);
+        }
+        let output = command.output().await;
+        let _ = fs::remove_file(&input);
+        let output = output.with_context(|| {
+            format!(
+                "could not run Tesseract TSV probe with {}",
+                self.tesseract_bin
+            )
+        })?;
+        validate_tesseract_tsv_output(output.status.success(), &output.stdout, &output.stderr)
+    }
+}
+
+fn validate_tesseract_tsv_output(success: bool, stdout: &[u8], stderr: &[u8]) -> Result<()> {
+    const HEADER: &str =
+        "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext";
+    let stdout = String::from_utf8_lossy(stdout);
+    let stderr = String::from_utf8_lossy(stderr);
+    if success && stdout.lines().any(|line| line.trim() == HEADER) {
+        return Ok(());
+    }
+    let stderr = stderr.trim();
+    let stdout = stdout.trim();
+    Err(anyhow!(
+        "Tesseract TSV probe failed: expected the TSV header but received another output{}{}",
+        if stderr.is_empty() {
+            String::new()
+        } else {
+            format!("; stderr: {stderr}")
+        },
+        if stdout.is_empty() {
+            String::new()
+        } else {
+            format!("; stdout: {}", stdout.chars().take(500).collect::<String>())
+        }
+    ))
 }
 
 fn resolve_pdfinfo_binary() -> String {
@@ -8348,5 +8411,18 @@ mod tests {
             Some(tessdata.clone())
         );
         fs::remove_dir_all(root).expect("remove test directory");
+    }
+
+    #[test]
+    fn tsv_probe_rejects_the_missing_config_failure_mode() {
+        let error = validate_tesseract_tsv_output(
+            true,
+            b"ordinary text instead of tab-separated output\n",
+            b"read_params_file: Can't open tsv\n",
+        )
+        .expect_err("plain output must not pass the TSV probe");
+        let detail = error.to_string();
+        assert!(detail.contains("expected the TSV header"));
+        assert!(detail.contains("Can't open tsv"));
     }
 }

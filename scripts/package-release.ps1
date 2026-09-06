@@ -310,6 +310,48 @@ foreach ($language in @("chi_sim", "eng")) {
 }
 
 
+# ReadTrace requests TSV output. Tesseract resolves `tsv` as
+# tessdata/configs/tsv, so the language models alone do not make a complete
+# portable OCR runtime.
+$stageConfigDirectory = Join-Path $stageTessdata "configs"
+$stageTsvConfig = Join-Path $stageConfigDirectory "tsv"
+
+New-Item `
+    -ItemType Directory `
+    -Force `
+    -Path $stageConfigDirectory |
+    Out-Null
+
+$tsvCandidates = @()
+
+if (-not [string]::IsNullOrWhiteSpace($TessdataRoot)) {
+    $tsvCandidates += Join-Path $TessdataRoot "configs\tsv"
+}
+
+$tsvCandidates += Join-Path $tessDir "tessdata\configs\tsv"
+
+foreach ($candidate in $tsvCandidates) {
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        Copy-Item `
+            -LiteralPath $candidate `
+            -Destination $stageTsvConfig `
+            -Force
+        break
+    }
+}
+
+if (-not (Test-Path -LiteralPath $stageTsvConfig -PathType Leaf)) {
+    Set-Content `
+        -LiteralPath $stageTsvConfig `
+        -Value "tessedit_create_tsv 1" `
+        -Encoding ASCII
+}
+
+if ((Get-Content -LiteralPath $stageTsvConfig -Raw).Trim() -ne "tessedit_create_tsv 1") {
+    throw "invalid Tesseract TSV config in release: $stageTsvConfig"
+}
+
+
 foreach ($language in @("chi_sim", "eng")) {
     $languageFile = Join-Path `
         $stageTessdata `

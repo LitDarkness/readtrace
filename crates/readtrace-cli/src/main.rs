@@ -754,6 +754,14 @@ async fn main() -> Result<()> {
         }
         Commands::OcrCheck => {
             let provider = TesseractOcrProvider::new(AppConfig::from_env().ocr_languages);
+            let tessdata_prefix = provider.tessdata_prefix();
+            let tsv_config_path = tessdata_prefix
+                .as_ref()
+                .map(|path| path.join("configs").join("tsv"));
+            let tsv_config_available = tsv_config_path.as_ref().is_some_and(|path| path.is_file());
+            let tsv_probe = provider.verify_tsv_output().await;
+            let tsv_output_available = tsv_probe.is_ok();
+            let tsv_error = tsv_probe.err().map(|error| format!("{error:#}"));
             let executable_available = |value: &str| {
                 PathBuf::from(value).is_file()
                     || std::process::Command::new(value)
@@ -773,8 +781,12 @@ async fn main() -> Result<()> {
                      "ocr_dpi": provider.dpi,
                      "ocr_concurrency": provider.ocr_concurrency,
                      "ocr_languages": provider.languages,
-                    "tessdata_prefix": provider.tessdata_prefix().map(|path| path.to_string_lossy().into_owned()),
-                    "tessdata_override": std::env::var("READTRACE_TESSDATA_PREFIX").ok()
+                    "tessdata_prefix": tessdata_prefix.map(|path| path.to_string_lossy().into_owned()),
+                    "tessdata_override": std::env::var("READTRACE_TESSDATA_PREFIX").ok(),
+                    "tsv_config_path": tsv_config_path.map(|path| path.to_string_lossy().into_owned()),
+                    "tsv_config_available": tsv_config_available,
+                    "tsv_output_available": tsv_output_available,
+                    "tsv_error": tsv_error
                 }))?,
                 &output_format,
             )?;

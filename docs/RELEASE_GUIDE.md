@@ -8,8 +8,8 @@
 
 | 文件 | 目标设备 | 内容 |
 | --- | --- | --- |
-| `readtrace-<版本>-windows-x86_64.zip` | Windows 10/11 x86_64 | `readtrace.exe`、Tesseract、`chi_sim`/`eng` 语言数据、Poppler、许可证和使用说明 |
-| `readtrace-<版本>-macos-arm64.tar.gz` | Apple Silicon macOS（M1/M2/M3/M4） | `readtrace`、Tesseract、`chi_sim`/`eng` 语言数据、Poppler、动态库、许可证和使用说明 |
+| `readtrace-<版本>-windows-x86_64.zip` | Windows 10/11 x86_64 | `readtrace.exe`、Tesseract、`chi_sim`/`eng` 语言数据、`configs/tsv`、Poppler、许可证和使用说明 |
+| `readtrace-<版本>-macos-arm64.tar.gz` | Apple Silicon macOS（M1/M2/M3/M4） | `readtrace`、Tesseract、`chi_sim`/`eng` 语言数据、`configs/tsv`、Poppler、动态库、许可证和使用说明 |
 
 解压目录中的 `readtrace`/`readtrace.exe` 会从可执行文件旁边的 `tools/` 查找 OCR 工具，因此不要求用户把 Tesseract 或 Poppler 加到系统 PATH。Rust 依赖已经编译进可执行文件，用户不需要另外安装 Rust；Windows 构建还静态链接 MSVC CRT。压缩包同时提供不含密钥的 `.env.example`，仍可用 `.env` 或 GUI 中的 Provider 设置覆盖默认路径。
 
@@ -64,7 +64,7 @@ brew install rust tesseract tesseract-lang poppler dylibbundler
 VERSION=v0.1.0 bash scripts/package-release-macos.sh
 ```
 
-脚本会用 `dylibbundler` 收集 Tesseract 和 Poppler 需要的动态库，并把它们放在压缩包的 `tools/*/lib` 目录。输出在 `dist/readtrace-v0.1.0-macos-arm64.tar.gz`。
+脚本会用 `dylibbundler` 收集 Tesseract 和 Poppler 需要的动态库，并把它们放在压缩包的 `tools/*/lib` 目录。它还会复制 `tessdata/configs/tsv`，再实际运行 TSV 输出探针；缺少配置或只返回普通文本都会终止打包。输出在 `dist/readtrace-v0.1.0-macos-arm64.tar.gz`。
 
 用户解压后可直接启动：
 

@@ -22,7 +22,7 @@ ReadTrace 可以：
 * Windows x86_64：`readtrace-*-windows-x86_64.zip`
 * macOS Apple Silicon：`readtrace-*-macos-arm64.tar.gz`
 
-Release 已经包含 ReadTrace、Tesseract、`chi_sim` / `eng` OCR 语言数据以及 Poppler。
+Release 已经包含 ReadTrace、Tesseract、`chi_sim` / `eng` OCR 语言数据、TSV 输出配置以及 Poppler。`ocr-check` 会实际验证 TSV 输出，不再只检查可执行文件是否存在。
 
 解压后不要单独移动 `readtrace` / `readtrace.exe`，应保留整个目录，因为 `tools/` 中包含 OCR 和 PDF 运行时依赖。
 
