@@ -1,15 +1,17 @@
 # ReadTrace（读迹）
 
-ReadTrace 是一个面向视觉文本的本地整理工作台：把图片、PDF、TXT 和 Markdown 放进独立 Vault，逐页 OCR，做确定性的文本清洗，再用可替换的 LLM 修复整页内容，最后生成可以人工编辑、检索和引用的 Markdown。原始素材始终保留，修复结果不会覆盖证据。
+ReadTrace 是一个面向视觉文本的本地整理工作台：把图片、PDF、TXT 和 Markdown 放进独立 Vault，逐页 OCR，做确定性的文本清洗，再用可替换的 LLM 修复整页内容，最后生成可以人工编辑、检索和引用的 Markdown。原始素材始终保留。
 
-ReadTrace 的边界很明确：
+ReadTrace 可以：
 
 - .txt、.md 直接读取；.pdf、.png、.jpg、.jpeg、.webp、.bmp 走 Poppler + Tesseract。
 - 文件夹递归导入支持的格式，其余格式只记录到 skipped_files。
 - 搜索和引用只面向 clean/ 中的最终文档。视觉页面必须先有完整修复；显式使用 --allow-unrepaired 时可以生成带警告的临时稿，但该稿不能成为问答证据。
-- 同一个 Rust 协议同时服务 CLI 和 Web；Web 只是工作台界面，不另写一套业务逻辑。
+- 同一个 Rust 协议同时服务 CLI 和 Web。
 
 ## 快速开始
+
+下面先给出面向使用者的最简便方式；源码开发、依赖安装和排障细节统一放在 [docs/QUICK_START.md](docs/QUICK_START.md)，不需要在两份文档之间寻找另一套启动命令。
 
 ### 直接使用 Release（推荐）
 
@@ -52,7 +54,7 @@ http://127.0.0.1:8787/
 
 建议把程序目录和 Workspace 分开保存。升级 ReadTrace 时只替换程序目录，不会影响 Workspace 中的 Vault 和文档。
 
-初次使用，你需要在 “来源与 API” 中选择使用 CodeX 、GLM 或者自定义的服务商，以及提供 API key。
+初次使用可以在“来源与 API”中选择 Mock，或添加 Codex、GLM 和其它 OpenAI-compatible 服务。只有真实 HTTP/Codex 调用需要填写 API key。
 
 完整的首次使用流程见 [docs/QUICK_START.md](docs/QUICK_START.md) 的第 5 部分 (第一次启动 Web 工作台)。
 
@@ -62,7 +64,7 @@ http://127.0.0.1:8787/
 
 详见下面的开发环境说明以及 [docs/QUICK_START.md](docs/QUICK_START.md) 的“从源码运行”部分。
 
-## 1. 先理解三个路径
+## 1. 关键路径
 
 以下命令均假设当前目录是项目根目录：
 
@@ -101,7 +103,7 @@ Intel Mac 将 /opt/homebrew 换成 /usr/local。若 ocr-check 找不到 chi_sim�
 
 ### Windows
 
-Windows 的完整安装顺序是：安装 Tesseract（含 chi_sim 语言数据）、安装包含 pdfinfo.exe 和 pdftoppm.exe 的 Poppler、用 PowerShell 验证三个程序，再把绝对路径写入 .env。Windows 不需要执行名为 tesseract-lang 的命令；它对应的是 Windows 安装器中的语言数据或 tessdata 文件。逐步截图式说明见 [docs/QUICK_START.md](docs/QUICK_START.md)。
+Windows 的完整安装顺序是：安装 Tesseract（含 chi_sim 语言数据）、安装包含 pdfinfo.exe 和 pdftoppm.exe 的 Poppler、用 PowerShell 验证三个程序，再把绝对路径写入 .env。Windows 不需要执行名为 tesseract-lang 的命令；它对应的是 Windows 安装器中的语言数据或 tessdata 文件。逐步说明见 [docs/QUICK_START.md](docs/QUICK_START.md)。
 
 在 .env 填写机器上的绝对路径：
 
@@ -155,6 +157,8 @@ READTRACE_RESPONSE_FORMAT=json_object
 READTRACE_MAX_TOKENS_FIELD=max_tokens
 READTRACE_THINKING_MODE=none
 READTRACE_TIMEOUT_SECONDS=300
+READTRACE_MAX_COST_USD=2.0
+READTRACE_MAX_TOTAL_TOKENS=0
 ~~~
 
 先检查配置，再发送最小探针：
@@ -168,7 +172,7 @@ cargo run --quiet -p readtrace-cli -- ai-check --provider http --model glm-5.2 -
 
 | Provider | 用途 | 需要什么 |
 | --- | --- | --- |
-| http | 学校网关或任意 OpenAI-compatible 服务 | Base URL、模型和 Key 环境变量 |
+| http | 任意 OpenAI-compatible 服务 | Base URL、模型和 Key 环境变量 |
 | codex-cli | 当前机器上可执行的 Codex 命令 | 已安装并登录 codex |
 | mock | 不联网的流程和 UI 测试 | 不需要 Key，费用固定为 USD 0 |
 
@@ -360,18 +364,14 @@ CNY = USD × usd_to_cny
 | GLM 5.3 Flash | 0.15 | 0.03 | 0.50 |
 | GLM 5.2 | 1.40 | 0.26 | 4.40 |
 
-未知自定义模型可在 .env 填写 READTRACE_INPUT_PRICE、READTRACE_CACHED_INPUT_PRICE、READTRACE_OUTPUT_PRICE。Mock 明确记为 USD 0；只有 Token 或价格确实缺失时才会显示 unknown。课程要求的开发阶段 AI 开销（人时、外部对话、订阅费用）与本运行时台账分开，按 [docs/DELIVERABLES_AND_COST_NOTES.md](docs/DELIVERABLES_AND_COST_NOTES.md) 人工整理。
 
-## 8. 文档索引和课程交付
+## 8. 文档索引
 
 - [docs/ARCHITECTURE_EXPLAINED.md](docs/ARCHITECTURE_EXPLAINED.md)：模块、数据流、关键结构、Provider、费用和当前完成度。
 - [docs/CLI_TUTORIAL.md](docs/CLI_TUTORIAL.md)：命令参数、断点恢复、删除和 API。
 - [docs/CLI_END_TO_END_EXAMPLE.md](docs/CLI_END_TO_END_EXAMPLE.md)：从导入到合并、引用问答的可复制流程。
 - [docs/COMPLETE_FLOW_TUTORIAL.md](docs/COMPLETE_FLOW_TUTORIAL.md)：PDF、Markdown、TXT 和两张图片的完整示例。
-- [docs/GITHUB_AND_DEVICE_SETUP.md](docs/GITHUB_AND_DEVICE_SETUP.md)：GitHub、Windows/macOS、Key 和 Vault 迁移。
 - [docs/RELEASE_GUIDE.md](docs/RELEASE_GUIDE.md)：Windows/macOS 自包含压缩包、第三方许可证和 GitHub Release。
+- [docs/DOCUMENT_MAP.md](docs/DOCUMENT_MAP.md)：按使用者、开发者和发布者整理文档入口。
 - [docs/WEB_GUI_PROTOCOL.md](docs/WEB_GUI_PROTOCOL.md)：Web API 和 SSE 契约。
 - [docs/IMPLEMENTATION_AUDIT.md](docs/IMPLEMENTATION_AUDIT.md)：逐项验收、已知边界和检查结果。
-- [docs/DELIVERABLES_AND_COST_NOTES.md](docs/DELIVERABLES_AND_COST_NOTES.md)：课程交付清单与运行时/开发成本的分界。
-
-课程的 PDF 设计文档、完整 AI 对话历史和 Excel 开发开销表在最终验收阶段统一导出到网络学堂；源代码仓库只提交源码、README、模板和可复现实例，不提交真实 Key、Workspace、运行记录或其它本地数据。

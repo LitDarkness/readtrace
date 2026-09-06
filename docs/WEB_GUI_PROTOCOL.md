@@ -36,6 +36,7 @@ cargo run --quiet -p readtrace-cli -- serve ./workspace --bind 127.0.0.1:8787
 | `POST` | `/api/prompts/repair` | `{ "content": "..." }` 保存到 `prompts/repair.md`；`{ "reset": true }` 恢复项目默认模板 |
 | `GET` | `/api/sessions` | 列出当前 Vault 的对话摘要，按最近更新时间排序 |
 | `GET` | `/api/sessions/{session_id}` | 恢复某个对话的消息、引用和会话状态 |
+| `POST` | `/api/sessions/import` | 导入完整 Session JSON（消息、工具事件、证据、阅读状态和调用记录） |
 | `POST` | `/api/answer` | `{ "query", "source_refs", "quotes", "profile_id", "thinking", "session_id" }` 进行带证据的问答 |
 
 `/api/import-upload` 的请求体上限为 512 MiB，单文件上限为 256 MiB、单次最多 20,000 个文件；文件名会在服务端规范化并拒绝绝对路径和 `..` 穿越。上传临时文件位于当前 Vault 的 `tmp/web-import/`，导入成功或失败后都会清理。
@@ -111,5 +112,7 @@ Web 的“来源与 API”页提供四个内置来源：清华 GLM-5.3 Flash、�
 - `POST /api/answer` 支持 `query`、`source_refs`、`quotes`、`session_id` 以及独立的 Provider 选择。阅读室把结果渲染成连续的用户/助手气泡，保留当前 `session_id` 以支持追问；每轮回答显示引用数量、Token 和 USD 费用。点击“添加引用”会打开一个居中的选择器：顶部是 clean 全文搜索，下面是可折叠的 clean 文件树，支持文件名/路径本地即时筛选和多选；选中的文件会读入为带文件名的 `quotes`，不会把 raw OCR、图片、PDF、generated 历史或审计 JSON 送给模型。
 - 导入、批次处理、来源配置和阅读室都使用“推理强度”，并直接写入请求的 `thinking` 字段。界面统一显示 `None/Low/Mid/High`；GLM-5.3/5.3-Flash 会把 `None` 和 `Mid` 映射到实际允许的最低 `low`，GLM-5.2 等模型可用 `none` 真正发送 `thinking.type=disabled`。Codex/其它 OpenAI-compatible provider 仍使用各自的 reasoning effort 语义。
 - `GET /api/usage` 返回 input/cached-input/output/reasoning/total Token、费用和未知费用调用数。
+- 每次回答的 usage 会在阅读气泡和后台页面同时显示；`READTRACE_MAX_TOTAL_TOKENS` 可设置总 Token 预算，`READTRACE_MAX_COST_USD` 可设置实时美元预算，任一达到上限后新的 repair/answer 会被拒绝并保存 `budget_exceeded` 状态。
+- `GET /api/budget` 返回当前预算；`POST /api/budget` 接收 `{ "max_total_tokens": 60000, "max_cost_usd": 0.75 }`，预算设置保存到当前 Vault 的 `.readtrace/budget.json`，后台页可直接编辑并保存。填空或填 `0` 表示不限制该项。
 - `GET /api/activity` 返回最近事件、当前任务和用量摘要；事件类型包含 `task_started`、`progress`、`task_completed`、`warning`、`error`、`task_cancelled`。OCR/repair 服务任务在成功、部分失败或失败返回时都会追加终态事件；任务 API 使用 `completed_with_errors` 区分“部分成功”，不会把 `{errors:N,repaired_pages:0}` 显示成完成。终端视图把历史启动/进度行作为事件记录，不再把它们伪装成持续运行中的任务；实际运行状态以任务卡片为准。
 - `GET /api/events` 是兼容性的全局 SSE；GUI 的进度以 task API 为准。

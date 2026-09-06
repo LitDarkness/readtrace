@@ -164,9 +164,24 @@ pub struct AppConfig {
     /// Maximum number of in-flight LLM page calls during a repair run.
     #[serde(default = "default_llm_concurrency")]
     pub llm_concurrency: u32,
-    /// Optional runtime budget guard retained for future enforcement.
+    /// Maximum known USD spend for a project run. Zero disables the guard.
     pub max_cost_usd: f64,
     pub ocr_languages: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BudgetSettings {
+    pub max_total_tokens: Option<u64>,
+    pub max_cost_usd: Option<f64>,
+}
+
+impl Default for BudgetSettings {
+    fn default() -> Self {
+        Self {
+            max_total_tokens: None,
+            max_cost_usd: Some(2.0),
+        }
+    }
 }
 
 impl Default for AppConfig {
@@ -2106,6 +2121,14 @@ impl ProjectStore {
             let page_copy = prepared_page.clone();
             let mode = batch.mode.clone();
             let prompt_text = prompt.to_owned();
+            if self.budget_exceeded(config)? {
+                self.update_batch_status(&batch.batch_id, "budget_exceeded")?;
+                return Err(anyhow!(
+                    "runtime USD budget {:.6} reached before page {}",
+                    config.max_cost_usd,
+                    index + 1
+                ));
+            }
             pending.push(async move {
                 let started = std::time::Instant::now();
                 let response = provider.repair_page(&model_page, &mode, &prompt_text).await;
@@ -2140,6 +2163,14 @@ impl ProjectStore {
                     &mut repaired_by_index,
                     &mut errors_by_index,
                 )?;
+                if self.budget_exceeded(config)? {
+                    self.update_batch_status(&batch.batch_id, "budget_exceeded")?;
+                    return Err(anyhow!(
+                        "runtime USD budget {:.6} reached; repair stopped after page {}",
+                        config.max_cost_usd,
+                        index + 1
+                    ));
+                }
                 completed += 1;
                 self.record_event(
                     AgentEvent::Progress {
@@ -2181,6 +2212,14 @@ impl ProjectStore {
                 &mut repaired_by_index,
                 &mut errors_by_index,
             )?;
+            if self.budget_exceeded(config)? {
+                self.update_batch_status(&batch.batch_id, "budget_exceeded")?;
+                return Err(anyhow!(
+                    "runtime USD budget {:.6} reached; repair stopped after page {}",
+                    config.max_cost_usd,
+                    index + 1
+                ));
+            }
             completed += 1;
             self.record_event(
                 AgentEvent::Progress {
@@ -3636,6 +3675,9 @@ impl ProjectStore {
         self.save_session(&session)?;
         Ok(session)
     }
+    pub fn import_session_value(&self, session: &Session) -> Result<PathBuf> {
+        self.save_session(session)
+    }
     pub fn record_call(&self, session: &mut Session, call: CallRecord) -> Result<()> {
         session.call_records.push(call);
         self.save_session(session)?;
@@ -3685,6 +3727,55 @@ impl ProjectStore {
             fs::write(self.path("runtime/calls.jsonl"), output)?;
         }
         Ok(calls)
+    }
+
+    /// Stop starting new model work once the configured spend budget is met.
+    /// Unknown-cost calls never count as zero, so a missing provider usage
+    /// cannot silently bypass the guard.
+    pub fn budget_exceeded(&self, config: &AppConfig) -> Result<bool> {
+        let settings = self.budget_settings().unwrap_or_default();
+        let token_budget = settings.max_total_tokens.or_else(|| {
+            std::env::var("READTRACE_MAX_TOTAL_TOKENS")
+                .ok()
+                .and_then(|value| value.parse::<u64>().ok())
+                .filter(|value| *value > 0)
+        });
+        let cost_budget = settings.max_cost_usd.unwrap_or(config.max_cost_usd);
+        if cost_budget <= 0.0 && token_budget.is_none() {
+            return Ok(false);
+        }
+        let calls = self.runtime_calls(None)?;
+        let spent = calls.iter().filter_map(|call| call.cost_usd).sum::<f64>();
+        let tokens = calls
+            .iter()
+            .filter_map(|call| call.total_tokens)
+            .sum::<u64>();
+        Ok((cost_budget > 0.0 && spent >= cost_budget)
+            || token_budget.is_some_and(|budget| tokens >= budget))
+    }
+
+    pub fn budget_settings(&self) -> Result<BudgetSettings> {
+        let path = self.path(".readtrace/budget.json");
+        if path.is_file() {
+            return Ok(serde_json::from_str(&fs::read_to_string(path)?)?);
+        }
+        let max_total_tokens = std::env::var("READTRACE_MAX_TOTAL_TOKENS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|v| *v > 0);
+        let max_cost_usd = std::env::var("READTRACE_MAX_COST_USD")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|v| *v > 0.0)
+            .or(Some(2.0));
+        Ok(BudgetSettings {
+            max_total_tokens,
+            max_cost_usd,
+        })
+    }
+
+    pub fn save_budget_settings(&self, settings: &BudgetSettings) -> Result<()> {
+        write_json(&self.path(".readtrace/budget.json"), settings)
     }
     pub fn runtime_usage_summary(&self, batch_id: Option<&str>) -> Result<RuntimeUsageSummary> {
         let calls = self.runtime_calls(batch_id)?;
@@ -4272,6 +4363,18 @@ impl<'a, P: LlmProvider + ?Sized> AgentLoop<'a, P> {
             excerpts: excerpts.clone(),
             history,
         };
+        if self.project.budget_exceeded(&self.config)? {
+            session.status = "budget_exceeded".into();
+            session.cancel_reason = Some(format!(
+                "runtime USD budget {:.6} reached",
+                self.config.max_cost_usd
+            ));
+            session.push_event(AgentEvent::TaskCancelled {
+                reason: session.cancel_reason.clone().unwrap_or_default(),
+            });
+            self.project.save_session(&session)?;
+            return Err(anyhow!("runtime USD budget reached before answer"));
+        }
         let provider_started = std::time::Instant::now();
         let (answer, usage) = self
             .provider

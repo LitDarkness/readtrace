@@ -38,6 +38,8 @@ ReadTrace 是按 Workspace 管理多个独立 Vault 的 OCR 整理工具。支�
 
 ## Human edit point
 
+Session 会持久化消息、工具请求/完成事件、证据、阅读位置、Provider 配置和 CallRecord；CLI 的 `session-export`/`session-import` 以及 Web 的 session GET/POST 接口支持查看、保存和恢复完整上下文。
+
 人工不需要逐条确认模型意见。可以编辑 `prompts/repair.md`、`prompts/profile.md`、`normalization.json` 或 `current.md`，也可以复制旧 revision 恢复。下一次 repair 默认复用未变化 checkpoint；明确 `--refresh` 才重跑。
 
 ## Provider contract

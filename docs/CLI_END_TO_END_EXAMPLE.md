@@ -2,7 +2,7 @@
 
 这是一份可以直接照着执行的示例。假设你第一次打开项目，不知道 Workspace、Vault、batch 或 `source_ref` 是什么，也不想手工猜目录。
 
-本教程保留已经在 Windows 跑通的 PowerShell 复现步骤。所有命令都从项目根目录开始；如果项目不在 `E:\AI_diary\summer_project`，把下面的 `$project` 改成实际路径。macOS 的依赖安装和等价 zsh/bash 变量语法见 [`GITHUB_AND_DEVICE_SETUP.md`](GITHUB_AND_DEVICE_SETUP.md)；CLI 子命令相同，把 `E:\...` 换成 `/Users/...`、反引号续行换成反斜杠即可。
+本教程保留已经在 Windows 跑通的 PowerShell 复现步骤。所有命令都从项目根目录开始；如果项目不在 `E:\AI_diary\summer_project`，把下面的 `$project` 改成实际路径。macOS 的依赖安装和发布包差异见 [`QUICK_START.md`](QUICK_START.md) 与 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md)；CLI 子命令相同，把 `E:\...` 换成 `/Users/...`、反引号续行换成反斜杠即可。
 
 ## 1. 先把四种路径分清楚
 
@@ -594,7 +594,7 @@ $usage.calls |
   Format-Table
 ```
 
-当前 `.env` 的 `READTRACE_USD_TO_CNY` 为 `6.8`。已知 OpenAI 模型（包括 GPT-5.6 Luna/Terra/Sol、GPT-5.5、GPT-5.4 系列和 GPT-4o Mini）、GLM‑5.2 以及 GLM‑5.3 Flash 会根据价格表自动填入单价；Codex Luna 为 `$0.20/$0.02/$1.20`，GLM‑5.3 Flash 为 `$0.15/$0.03/$0.50`，GLM‑5.2 为 `$1.40/$0.26/$4.40`（均为 input/cached input/output，每百万 Token；GLM‑5.2 来源为 2026-09-02 查询的 [Z.ai 官方价格页](https://docs.z.ai/guides/overview/pricing)）。学校网关采用不同结算价时必须手工设置 `READTRACE_INPUT_PRICE`、`READTRACE_CACHED_INPUT_PRICE`、`READTRACE_OUTPUT_PRICE`。如果 Provider 不返回 usage，Token 和费用保持 `null`；CLI 不会根据字符数伪造计费。修改汇率不会回写历史调用，旧记录保留当时的汇率。开发阶段和学校作业要求的 AI 对话历史/人时 Excel 仍然是独立人工整理的交付物。
+当前 `.env` 的 `READTRACE_USD_TO_CNY` 为 `6.8`。已知 OpenAI 模型（包括 GPT-5.6 Luna/Terra/Sol、GPT-5.5、GPT-5.4 系列和 GPT-4o Mini）、GLM‑5.2 以及 GLM‑5.3 Flash 会根据价格表自动填入单价；Codex Luna 为 `$0.20/$0.02/$1.20`，GLM‑5.3 Flash 为 `$0.15/$0.03/$0.50`，GLM‑5.2 为 `$1.40/$0.26/$4.40`（均为 input/cached input/output，每百万 Token；GLM‑5.2 来源为 2026-09-02 查询的 [Z.ai 官方价格页](https://docs.z.ai/guides/overview/pricing)）。学校网关采用不同结算价时必须手工设置 `READTRACE_INPUT_PRICE`、`READTRACE_CACHED_INPUT_PRICE`、`READTRACE_OUTPUT_PRICE`。如果 Provider 不返回 usage，Token 和费用保持 `null`；CLI 不会根据字符数伪造计费。修改汇率不会回写历史调用，旧记录保留当时的汇率。
 
 ## 10. 所有 JSON 命令的统一规则
 

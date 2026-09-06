@@ -266,6 +266,13 @@ label textarea, textarea { padding: 10px; font-size: 11px; line-height: 1.6; res
 .backend-metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .backend-metrics .panel { padding: 15px 16px; }
 .backend-layout { display: grid; grid-template-columns: 1.22fr .78fr; gap: 18px; margin-bottom: 18px; }
+.budget-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; gap: 14px; margin: 0 0 18px; }
+.budget-panel { display: flex; align-items: center; gap: 18px; min-width: 0; min-height: 78px; padding: 15px 22px; }
+.budget-panel > div { min-width: 0; flex: 1 1 auto; }
+.budget-input { box-sizing: border-box; width: min(180px, 34%); min-width: 96px; border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; font: inherit; color: var(--ink); background: var(--paper); }
+.budget-unit, .budget-status { color: var(--muted); font-size: 13px; }
+@media (max-width: 900px) { .budget-row { grid-template-columns: 1fr 1fr; } .budget-row > #budgetSave { grid-column: 1 / -1; justify-self: start; } }
+@media (max-width: 600px) { .budget-row { grid-template-columns: 1fr; } .budget-row > #budgetSave { grid-column: auto; } }
 .activity-list { display: grid; max-height: 430px; overflow: auto; padding: 0 20px 13px; }
 .activity-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid #f0eff5; }
 .activity-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: #b9b8c6; }

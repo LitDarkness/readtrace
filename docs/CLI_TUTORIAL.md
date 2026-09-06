@@ -9,7 +9,7 @@
 | 续行 | 行尾反引号 `` ` `` | 行尾反斜杠 `\` |
 | 当前目录相对路径 | `.\workspace` | `./workspace` |
 
-双平台依赖安装、`.env` 和迁移步骤见 [`GITHUB_AND_DEVICE_SETUP.md`](GITHUB_AND_DEVICE_SETUP.md)。
+双平台依赖安装和 Release 包使用见 [`QUICK_START.md`](QUICK_START.md) 与 [`RELEASE_GUIDE.md`](RELEASE_GUIDE.md)。
 
 第一次使用不必先掌握 CLI：先按 [`QUICK_START.md`](QUICK_START.md) 安装 OCR 依赖并启动 Web；本文用于需要脚本化、断点恢复或批量操作时的命令速查。Provider 配置是可选的，`mock` 可以在没有 Key 的情况下验证流程。
 

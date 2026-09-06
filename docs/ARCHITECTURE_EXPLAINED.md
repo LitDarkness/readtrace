@@ -1,6 +1,6 @@
 # ReadTrace 当前架构说明
 
-本文描述仓库中已经实现的架构，不是未来 GUI 的愿望清单。课程设计 PDF、完整 AI 对话记录和 Excel 开销表会在最终验收时统一导出；代码仓库只保留能复现系统的源码、配置模板和操作文档。
+本文描述仓库中已经实现的架构，不是未来 GUI 的愿望清单。代码仓库只保留能复现系统的源码、配置模板和操作文档；个人素材、运行时数据和发布前的本机记录不属于产品运行链。
 
 ## 1. 目标、边界与核心取舍
 
@@ -172,7 +172,7 @@ CNY = USD × usd_to_cny
 | GLM 5.3 Flash | 0.15 | 0.03 | 0.50 |
 | GLM 5.2 | 1.40 | 0.26 | 4.40 |
 
-未知自定义模型可以在 .env 提供 READTRACE_INPUT_PRICE、READTRACE_CACHED_INPUT_PRICE、READTRACE_OUTPUT_PRICE。课程要求的开发阶段人时和外部 AI 对话账单不是这份运行时台账的替代品，必须另行登记。
+未知自定义模型可以在 `.env` 提供 `READTRACE_INPUT_PRICE`、`READTRACE_CACHED_INPUT_PRICE`、`READTRACE_OUTPUT_PRICE`。运行时台账只记录 ReadTrace 实际发出的调用，不代替外部平台的订阅账单或人工成本记录。
 
 ## 10. Web 工作台
 
@@ -189,24 +189,15 @@ Web API 由 readtrace-server 提供，前端静态文件位于 crates/readtrace-
 
 长任务通过 task 状态和 SSE 事件更新；事件终态明确区分 completed、failed、cancelled，前端不会把“已创建”误显示为“已完成”。
 
-## 11. 当前完成度与课程映射
+Session 历史由 `sessions/<session_id>.json` 持久化，包含消息、工具事件、证据、阅读状态、Provider 配置和该会话的 CallRecord。Web 的 `GET /api/sessions`、`GET /api/sessions/{id}` 用于列出和恢复，`POST /api/sessions/import` 用于导入完整 JSON；CLI 提供对应的 `session-export` 和 `session-import`。因此任务过程不是黑盒，用户可以查看工具调用轨迹并迁移完整上下文。
 
-截至 2026-09-02，核心后端和 Web 工作台已达到可演示状态：Workspace/Vault 管理、文件/文件夹导入、真实 OCR、PDF 页级进度、normalize、整页 repair、断点续跑、同 batch 与跨 batch merge、确认式删除、clean 发布、搜索、引用问答、session、Markdown 编辑保存、Provider profile 和运行费用账本均已落地。测试结果为 core 68 项、server 9 项，共 77 项；cargo fmt、cargo clippy 和前端语法检查通过。用户已在 macOS 上完成实际运行验证，仓库也包含跨平台路径与安装说明。
+运行预算由 `READTRACE_MAX_TOTAL_TOKENS` 和 `READTRACE_MAX_COST_USD` 配置；Token 预算默认关闭，费用预算默认为 2 美元，设为 0 表示关闭。每次新 repair/answer 前读取累计 Token 和已知费用，任一达到预算后拒绝新的模型调用并记录 `budget_exceeded`；未知费用不会被当成 0。每次 API 响应中的 input/output/cached/reasoning/total Token 和价格快照仍写入 `CallRecord`，后台、阅读气泡和 usage API 同时展示。
 
-作业要求对应关系：
+## 11. 当前完成度与产品边界
 
-- 痛点分析：OCR 错字、断行和角色标签需要上下文，逐条 patch 不适合整页剧情。
-- 场景定制：整页 repair + 可编辑 prompt；OCR/repair 分阶段 checkpoint；原素材快照、clean 投影和可回溯 revision；HTTP/Codex 双 Provider。
-- 架构图、数据流、结构和 crate 选型：本文第 2、3、4 节。
-- 源代码、README、配置和演示：仓库根目录及 docs/CLI_*。
-- AI 对话历史和开发开销 Excel：最终验收时从保留的本地记录导出，详见 docs/DELIVERABLES_AND_COST_NOTES.md。
-- 逐项验收和已知边界：docs/IMPLEMENTATION_AUDIT.md。
+截至 2026-09-06，核心后端和 Web 工作台已达到可演示状态：Workspace/Vault 管理、文件/文件夹导入、真实 OCR、PDF 页级进度、normalize、整页 repair、断点续跑、同 batch 与跨 batch merge、确认式删除、clean 发布、搜索、引用问答、session、Markdown 编辑保存、Provider profile 和运行费用账本均已落地。当前工作树测试为 core 69 项、server 9 项，共 78 项；格式、Clippy 和前端语法检查以最近一次 CI/本地检查结果为准。用户已在 macOS 上完成实际运行验证，仓库也包含跨平台路径、依赖安装和自包含发布包说明。
 
-课程交付仍有三项“文档整理”工作，不属于核心运行链：
-
-1. 将本文和痛点/场景定制内容排版为设计 PDF，并渲染检查。
-2. 导出完整的 AI 原始对话记录。
-3. 按阶段填写人时、API 调用、Token、费用、模型和工具的 Excel。
+项目刻意保留几条边界：搜索和引用只读 `clean/`；原始素材和派生 revision 不随产品仓库分发；外部演示稿、个人素材、完整开发对话和费用表属于发布流程之外的本机材料。它们即使存在于开发目录，也不应成为新设备运行 ReadTrace 的前置条件。
 
 ## 12. crate 选型
 
@@ -224,7 +215,7 @@ Web API 由 readtrace-server 提供，前端静态文件位于 crates/readtrace-
 - 第一次启动：[docs/QUICK_START.md](QUICK_START.md)
 - CLI：[docs/CLI_TUTORIAL.md](CLI_TUTORIAL.md) 和 [docs/CLI_END_TO_END_EXAMPLE.md](CLI_END_TO_END_EXAMPLE.md)
 - 完整 PDF/Markdown/图片样例：[docs/COMPLETE_FLOW_TUTORIAL.md](COMPLETE_FLOW_TUTORIAL.md)
-- 双平台安装与 GitHub：[docs/GITHUB_AND_DEVICE_SETUP.md](GITHUB_AND_DEVICE_SETUP.md)
+- 双平台安装与发布包：[docs/RELEASE_GUIDE.md](RELEASE_GUIDE.md)
 - Web API：[docs/WEB_GUI_PROTOCOL.md](WEB_GUI_PROTOCOL.md)
 - 验收：[docs/IMPLEMENTATION_AUDIT.md](IMPLEMENTATION_AUDIT.md)
-- 课程清单与成本：[docs/DELIVERABLES_AND_COST_NOTES.md](DELIVERABLES_AND_COST_NOTES.md)
+- 文档导航：[docs/DOCUMENT_MAP.md](DOCUMENT_MAP.md)

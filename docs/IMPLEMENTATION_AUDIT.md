@@ -1,4 +1,4 @@
-# ReadTrace 实现审计（2026-09-02）
+# ReadTrace 实现审计（2026-09-06）
 
 ## 结论
 
@@ -7,6 +7,16 @@ CLI 和 `readtrace-core` 的核心链路已经可以完整演示：导入、按�
 因此，数据模型、CLI 和 Web/GUI 使用的是同一套核心协议。Web 已经提供工作台式界面：Workspace/Vault、文件浏览与预览、导入队列、批次处理、跨 batch 单元选择、后台命令记录和阅读问答均在同一个页面完成，GUI 只负责调用这些接口，不复制业务规则。
 
 ## 已验收项目
+
+### R5/R6 对照
+
+| 要求 | 状态 | 实现 |
+| --- | --- | --- |
+| R5：查看历史任务和多轮会话 | 通过 | `sessions/`、Web session 列表/恢复、CLI `session-export`/`session-import`。 |
+| R5：保存/加载完整上下文和工作轨迹 | 通过 | Session JSON 保存消息、工具事件、证据、阅读位置、Provider 配置和 CallRecord；新增 `POST /api/sessions/import`。 |
+| R6：精确记录 API Token 和费用 | 通过 | 从 Provider usage 读取 input/cached/output/reasoning/total，不从文本估算；按调用时价格快照计算 USD/CNY。 |
+| R6：界面展示用量 | 通过 | 阅读气泡、后台页面、`/api/usage` 和 `/api/activity` 展示 Token 与费用。 |
+| R6：预算达到后自动中断 | 通过 | `READTRACE_MAX_COST_USD` 达到上限后拒绝新的 repair/answer，并记录 `budget_exceeded`；在途请求完成后停止后续请求。 |
 
 | 优先级 | 项目 | 结果 |
 | --- | --- | --- |
@@ -65,13 +75,13 @@ cargo run --quiet -p readtrace-cli -- ocr-check
 cargo run --quiet -p readtrace-cli -- provider-check --preset codex-luna --speed high
 ```
 
-结果：格式检查、Clippy 通过；Workspace 测试共 77 项（core 68 项、server 9 项）全部通过；`ocr-check` 报告 Tesseract、Poppler/pdfinfo 和 OCR 并行度可用；Codex preset 配置显示 `gpt-5.6-luna`、`high`、官方价格和并发上限 4。Web 的推理强度统一显示 `None/Low/Mid/High`，首次加载优先选择已配置 Key 的自定义 `GLM-5.2`；用户仍可切换 `Codex Luna`、其它内置来源或自定义来源。显式把 `glm-*` 交给 Codex CLI 会被拒绝，避免 provider/model 错配。HTTP payload 回归测试覆盖 GLM-5.3 的 `reasoning_effort` 映射、有效强度归一化和 GLM-5.2 的 disabled thinking；新增回归测试覆盖 GLM‑5.2 官方价格、跨平台 Windows 盘符上传路径拒绝、旧网页 profile id、多页 OCR 页级进度、clean 发布和 clean-only 搜索。
+结果：格式检查、Clippy 通过；Workspace 测试共 78 项（core 69 项、server 9 项）全部通过；`ocr-check` 报告 Tesseract、Poppler/pdfinfo 和 OCR 并行度可用；Codex preset 配置显示 `gpt-5.6-luna`、`high`、官方价格和并发上限 4。Web 的推理强度统一显示 `None/Low/Mid/High`，首次加载优先选择已配置 Key 的自定义 `GLM-5.2`；用户仍可切换 `Codex Luna`、其它内置来源或自定义来源。显式把 `glm-*` 交给 Codex CLI 会被拒绝，避免 provider/model 错配。HTTP payload 回归测试覆盖 GLM-5.3 的 `reasoning_effort` 映射、有效强度归一化和 GLM-5.2 的 disabled thinking；新增回归测试覆盖 GLM‑5.2 官方价格、跨平台 Windows 盘符上传路径拒绝、旧网页 profile id、多页 OCR 页级进度、clean 发布和 clean-only 搜索。
 
 本轮在受限 Codex 宿主中用同一条 `ai-check --provider codex-cli` 做了多组最小复现：移除会话环境变量、显式指定 `.cmd`/`.exe`、以及直接运行 `codex exec`，均在本机 app-server 初始化处收到 `拒绝访问 (os error 5)`；开启可写临时 `CODEX_HOME` 后又得到 `readonly database` 或 `UnknownIssuer`。这说明失败发生在受限宿主的文件权限/证书边界，而不是 ReadTrace 的模型、Token 或计费解析错误，也不是普通网络抖动。相同的 ReadTrace 命令在普通外部 PowerShell 环境成功返回 `gpt-5.6-luna` 的 `input_tokens=13822`、`output_tokens=5`、`total_tokens=13827` 和 request id；因此使用 Codex 时应从普通 PowerShell/Windows Terminal 启动，或在当前宿主改用 HTTP/GLM/Mock。适配器现在会保留原始尾部并给出上述行动建议，且不会复制 `auth.json` 或绕过 Codex 安全边界。学校 HTTP/GLM 探针验证了两种模型：GLM-5.3-Flash `none→reasoning_effort=low` 返回 200（input 28、cached 0、output 72、reasoning 69、total 100），GLM-5.2 `thinking.type=disabled` 返回 200（input 22、cached 0、output 1、reasoning 0、total 23）；两者均按模型价格记录。
 
-当前 `first_run` Vault 的 ledger（含本轮 Chrome 流程）为 43 次调用、123,631 total Token（input 105,883、output 17,748、cached input 27,136），已计费 `$0.02511802`；已知 `gpt-5.6-luna` 按官方价计算，Mock 为 `$0`，15 条没有 provider usage 的 Codex 失败调用仍计入 `unknown_cost_calls`。这个运行时汇总不替代课程要求的开发阶段 Excel。
+历史快照：`first_run` Vault 的 ledger（含当时的浏览器流程）曾记录 43 次调用、123,631 total Token（input 105,883、output 17,748、cached input 27,136），已计费 `$0.02511802`；已知 `gpt-5.6-luna` 按官方价计算，Mock 为 `$0`，15 条没有 provider usage 的 Codex 失败调用仍计入 `unknown_cost_calls`。这是运行时数据示例，不是项目固定配额，也不代替外部平台账单或人工成本记录。
 
-为避免把探针和临时测试漏掉，最新 `usage --scan-root .` 已扫描项目内全部 JSONL 并按 `call_id` 去重：81 次调用，input 260,990、cached input 62,976、output 20,230、total 281,220 Token；已知调用费用合计 `$0.05201652`（约 `¥0.356417936`），29 次失败，37 条因宿主或 Provider 未返回 usage/价格而保持 unknown。该快照保存在本机 `deliverables/runtime-usage-all.json`（`deliverables/` 被 `.gitignore` 刻意排除，需按课程要求单独提交），删除的临时 Vault 不再参与统计。此次新增的来源连接测试和 Mock 对话也已进入台账；Mock 明确按 `$0` 处理。
+为避免把探针和临时测试漏掉，历史 `usage --scan-root .` 曾扫描项目内全部 JSONL 并按 `call_id` 去重：81 次调用，input 260,990、cached input 62,976、output 20,230、total 281,220 Token；已知调用费用合计 `$0.05201652`（约 `¥0.356417936`），29 次失败，37 条因宿主或 Provider 未返回 usage/价格而保持 unknown。快照位于本机被忽略的 `deliverables/runtime-usage-all.json`；删除的临时 Vault 不再参与统计。运行台账属于本机数据，不会随产品仓库分发。
 
 ## GUI 协议与当前实现（P1）
 
@@ -88,7 +98,7 @@ cargo run --quiet -p readtrace-cli -- provider-check --preset codex-luna --speed
 - `POST /api/build`、确认 `POST /api/merge` 和确认 `POST /api/merge-units` 会自动发布 `clean/<name>/document.md`；`clean_name` 可自定义名称，响应返回 `clean_path`。generated revision 继续保留，便于人工对照和回溯。
 - `crates/readtrace-server/static/` 提供无构建步骤的工作台 GUI：左侧 Workspace/Vault 导航，工作台统计，可折叠文件树与“内容文件/显示全部”切换，Markdown/TXT 编辑保存，文件预览/删除，导入队列，OCR/repair/merge 分步处理，后台命令与事件、任务取消，跨 batch 合并选择，来源与 API 管理，独立检索页、搜索上下文、聊天页的弹出式引用选择器（搜索结果上方、可读文件多选下方）、会话侧栏、大对话区、revision 和费用查看均已接入。模型选择显示来源名称、`内置/自定义` 和 Key 状态，推理强度统一为 `None/Low/Mid/High`。
 
-剩余事项主要是增强：统一 HTTP 错误状态码、为跨 batch merge 增加可视化排序编辑、增加预算停止条件和桌面打包；这些不阻塞当前 GUI 使用。
+剩余事项主要是增强：统一 HTTP 错误状态码和为跨 batch merge 增加更丰富的可视化排序编辑；这些不阻塞当前 GUI 使用。Windows/macOS 自包含发布包已经由 `docs/RELEASE_GUIDE.md` 和 GitHub Actions 覆盖。
 
 ## GUI 可复用的稳定边界
 

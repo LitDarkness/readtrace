@@ -32,6 +32,12 @@ struct AppState {
     tasks: TaskRegistry,
 }
 
+#[derive(Debug, Deserialize)]
+struct BudgetSettingsRequest {
+    max_total_tokens: Option<u64>,
+    max_cost_usd: Option<f64>,
+}
+
 /// A local provider profile.  The optional API key is persisted only in the
 /// user configuration directory (never in the project/Vault); it is omitted
 /// from every JSON response so the browser can only see `key_present`.
@@ -589,11 +595,13 @@ pub async fn run(project: PathBuf, bind: &str) -> Result<()> {
         .route("/api/tasks/{task_id}", get(task))
         .route("/api/tasks/{task_id}/cancel", post(cancel_task))
         .route("/api/sessions", get(sessions))
+        .route("/api/sessions/import", post(import_session))
         .route("/api/sessions/{session_id}", get(session))
         .route("/api/search", get(search))
         .route("/api/sources", get(sources))
         .route("/api/usage", get(usage))
         .route("/api/activity", get(activity))
+        .route("/api/budget", get(budget).post(save_budget))
         .route("/api/events", get(events))
         .with_state(state);
     let addr: SocketAddr = bind.parse()?;
@@ -2531,6 +2539,24 @@ async fn session(
     }
 }
 
+/// Import a complete session JSON previously returned by GET /api/sessions/{id}.
+/// The session contains messages, tool events, evidence, reading state and
+/// call records, so the UI/API can move a conversation between Vaults.
+async fn import_session(
+    State(state): State<AppState>,
+    Json(value): Json<Session>,
+) -> Json<serde_json::Value> {
+    let project = state.current_project().await;
+    match project.import_session_value(&value) {
+        Ok(path) => Json(serde_json::json!({
+            "ok": true,
+            "session_id": value.session_id,
+            "path": path.to_string_lossy()
+        })),
+        Err(error) => Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+    }
+}
+
 async fn search(
     State(state): State<AppState>,
     Query(q): Query<SearchQuery>,
@@ -2580,12 +2606,39 @@ async fn activity(State(state): State<AppState>) -> Json<serde_json::Value> {
         .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
         .collect::<Vec<_>>();
     let usage = project.runtime_usage_summary(None).ok();
+    let budget = project.budget_settings().unwrap_or_default();
     Json(serde_json::json!({
         "ok": true,
         "events": events,
         "tasks": state.tasks.list().await,
         "usage": usage,
+        "budget": budget,
     }))
+}
+
+async fn budget(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let project = state.current_project().await;
+    match project.budget_settings() {
+        Ok(settings) => Json(serde_json::json!({"ok": true, "budget": settings})),
+        Err(error) => Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+    }
+}
+
+async fn save_budget(
+    State(state): State<AppState>,
+    Json(request): Json<BudgetSettingsRequest>,
+) -> Json<serde_json::Value> {
+    let project = state.current_project().await;
+    let settings = BudgetSettings {
+        max_total_tokens: request.max_total_tokens.filter(|value| *value > 0),
+        max_cost_usd: request
+            .max_cost_usd
+            .filter(|value| value.is_finite() && *value > 0.0),
+    };
+    match project.save_budget_settings(&settings) {
+        Ok(()) => Json(serde_json::json!({"ok": true, "budget": settings})),
+        Err(error) => Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+    }
 }
 async fn events(
     State(state): State<AppState>,

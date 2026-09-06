@@ -2,6 +2,8 @@
 
 这份文档只解决一件事：在一台新机器上，从克隆仓库到打开 Web 工作台，并完成第一次导入。先走 Web，不需要先记住全部 CLI 参数；CLI 和更细的恢复/合并操作见 [CLI_TUTORIAL.md](CLI_TUTORIAL.md)。
 
+如果你下载的是自包含 Release，请先按根目录 [`README.md`](../README.md) 的快速开始启动；本文重点说明源码运行、系统依赖和排障。
+
 ## 0. 先分清三个位置
 
 命令都从项目根目录执行。项目根目录是包含 Cargo.toml 的目录：
@@ -212,4 +214,4 @@ cargo run --quiet -p readtrace-cli -- build ./workspace/vaults/default <batch_id
 | Codex CLI 拒绝访问/找不到命令 | 在普通终端验证 codex；不具备 CLI 时改用 HTTP 或 Mock |
 | 看不到搜索结果 | 确认文件已经发布到 clean；必要时在文件浏览保存后执行 reindex |
 
-更完整的双平台安装和设备迁移见 [GITHUB_AND_DEVICE_SETUP.md](GITHUB_AND_DEVICE_SETUP.md)；架构和数据边界见 [ARCHITECTURE_EXPLAINED.md](ARCHITECTURE_EXPLAINED.md)。
+Release 用户请看 [RELEASE_GUIDE.md](RELEASE_GUIDE.md) 了解压缩包内容和升级方式；源码用户可直接按本文操作。架构和数据边界见 [ARCHITECTURE_EXPLAINED.md](ARCHITECTURE_EXPLAINED.md)。
