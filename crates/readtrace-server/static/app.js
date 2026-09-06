@@ -160,6 +160,15 @@ function prepareRepairPromptUi() {
   };
   load();
 }
+function prepareRepairRetryUi() {
+  const options = document.querySelector('#view-process .process-options');
+  if (!options || $('refreshRepair')) return;
+  const label = document.createElement('label');
+  label.className = 'check-label repair-refresh-option';
+  label.title = '默认复用已经成功的页面，只重试失败或缺失的页面';
+  label.innerHTML = '<input id="refreshRepair" type="checkbox"> 强制重跑已成功页面';
+  options.append(label);
+}
 function prepareQueueCleanNameUi() {
   const button = $('queueAdd');
   if (!button) return;
@@ -219,7 +228,7 @@ function renderQueue() { const box = $('importQueue'); $('queueCount').textConte
 async function runQueue() { if (!state.queue.length) return; const items = [...state.queue]; state.queue = []; renderQueue(); const results = []; let previewBatch = null; for (const item of items) { try { const result = await post('/api/import', { path: item.path, mode: item.mode, no_copy: !item.copy }); if (!result.ok) throw new Error(result.error); const batchId = result.batch.batch_id; results.push(batchId); if (item.merge === 'auto') await runQueuedPipeline(batchId, item); if (item.merge === 'preview' && !previewBatch) previewBatch = batchId; toast(`已导入 ${batchId}`); } catch (error) { results.push(`失败：${error.message}`); toast(error.message, true); } } show('importOut', { batches: results }); await refresh(); const first = results.find((value) => !value.startsWith('失败')); if (previewBatch || ($('afterImport').value === 'process' && first)) { $('batch').value = previewBatch || first; go('process'); } else go('files'); }
 async function processOcr() { const batch = selectedBatch(); if (!batch) return; setProcessStatus('OCR 启动中…', 'running'); const result = await post('/api/ocr', { batch_id: batch, provider: $('ocrProvider').value }); show('processOut', result); if (result.ok) { setProcessStatus('OCR 处理中…', 'running', '', result.task_id); toast('OCR 已开始'); loadTasks(); } else { setProcessStatus('OCR 启动失败', 'failed', result.error || ''); toast(result.error, true); } }
 async function processNormalize() { const batch = selectedBatch(); if (!batch) return; setProcessStatus('规范化处理中…', 'running'); const result = await post('/api/normalize', { batch_id: batch, refresh: true }); show('processOut', result); if (result.ok) { const changed = (result.report?.pages || []).reduce((sum, page) => sum + (page.changes?.length || 0), 0); setProcessStatus('规范化已完成', 'completed', `${changed} 处确定性修改`); toast('确定性清洗完成'); } else { setProcessStatus('规范化失败', 'failed', result.error || ''); toast(result.error, true); } }
-async function processRepair() { const body = llmBody($('provider').value); if (!body) return; body.refresh = true; setProcessStatus('LLM 修复启动中…', 'running'); const result = await post('/api/repair', body); show('processOut', result); if (result.ok) { setProcessStatus('LLM 修复处理中…', 'running', '', result.task_id); toast('LLM 修复已开始'); loadTasks(); } else { setProcessStatus('LLM 修复启动失败', 'failed', result.error || ''); toast(result.error, true); } }
+async function processRepair() { const body = llmBody($('provider').value); if (!body) return; body.refresh = $('refreshRepair')?.checked || false; setProcessStatus(body.refresh ? 'LLM 修复强制重跑中…' : 'LLM 修复启动中…', 'running'); const result = await post('/api/repair', body); show('processOut', result); if (result.ok) { setProcessStatus('LLM 修复处理中…', 'running', '', result.task_id); toast(body.refresh ? 'LLM 修复已开始（将重跑所有页面）' : 'LLM 修复已开始（会跳过已成功页面）'); loadTasks(); } else { setProcessStatus('LLM 修复启动失败', 'failed', result.error || ''); toast(result.error, true); } }
 async function processMerge(confirm) { const batch = selectedBatch(); if (!batch) return; const allowUnrepaired = $('allowUnrepaired')?.checked || false; const cleanName = $('cleanName')?.value.trim() || undefined; setProcessStatus(confirm ? '正在生成 revision…' : '正在生成合并预览…', 'running'); const result = await post('/api/merge', { batch_id: batch, confirm, allow_unrepaired: allowUnrepaired, clean_name: cleanName }); show('processOut', result); if (!result.ok) { setProcessStatus('合并失败', 'failed', result.error || ''); return toast(result.error, true); } state.pendingMerge = result.plan; $('confirmMerge').disabled = !result.confirmation_required; if (result.confirmation_required) { const warning = result.warning || (allowUnrepaired ? '本次预览允许使用未修复 OCR' : '请检查合并预览并确认'); setProcessStatus('等待合并确认', warning.includes('未修复') ? 'warning' : 'idle', warning); toast(warning); } else { const warning = result.warning || ''; setProcessStatus(warning ? 'revision 已生成（含未修复 OCR）' : 'revision 已生成', warning ? 'warning' : 'completed', result.clean_path || result.artifact?.path || warning); toast(result.clean_path ? `已发布到 ${result.clean_path}` : (warning || '已生成 revision')); await refresh(); } }
 async function viewArtifact() { const batch = selectedBatch(); if (!batch) return; const result = await api(`/api/artifact?batch_id=${encodeURIComponent(batch)}`); show('artifactOut', result); if (!result.ok) toast(result.error, true); }
 async function mergeUnits(confirm) { if (!confirm && state.selectedUnits.size < 1) return toast('至少选择一个 source 或 clean 单元', true); const allowUnrepaired = $('allowUnrepaired')?.checked || $('allowUnrepairedUnits')?.checked || false; const cleanName = $('cleanName')?.value.trim() || undefined; const body = confirm ? { confirm: true, merge_id: state.pendingUnitMerge?.merge_id, allow_unrepaired: allowUnrepaired, clean_name: cleanName } : { confirm: false, units: [...state.selectedUnits], allow_unrepaired: allowUnrepaired, clean_name: cleanName }; if (confirm && !body.merge_id) return toast('请先预览合并计划', true); const result = await post('/api/merge-units', body); if (!result.ok) return toast(result.error, true); state.pendingUnitMerge = result.plan; $('mergeConfirmUnits').disabled = !result.confirmation_required; if (result.confirmation_required) { $('previewTitle').textContent = '合并预览'; $('previewContent').innerHTML = `<pre class="code-preview">${escapeHtml(pretty(result.plan))}</pre>`; } else { const warning = result.warning || ''; toast(result.clean_path ? `已发布到 ${result.clean_path}` : (warning || '跨 batch revision 已生成')); await loadFiles(); } }
@@ -1184,6 +1193,7 @@ prepareSearchAndChatPages();
 prepareCitationPicker();
 prepareSidebarUi();
 prepareRepairPromptUi();
+prepareRepairRetryUi();
 prepareFilePickerUi();
 runQueue = async function enhancedRunQueue() {
   if (!state.queue.length) return;

@@ -231,6 +231,48 @@ impl TaskRegistry {
         (task_id, token)
     }
 
+    /// Start a task only when an equivalent task is not already running. The
+    /// check and insertion happen under one lock so two rapid Web clicks
+    /// cannot launch duplicate repair requests for the same batch.
+    async fn start_if_idle(
+        &self,
+        kind: &str,
+        batch_id: Option<String>,
+    ) -> Result<(String, CancellationToken), String> {
+        let mut entries = self.entries.lock().await;
+        if let Some(existing) = entries.values().find(|entry| {
+            entry.snapshot.kind == kind
+                && entry.snapshot.batch_id == batch_id
+                && entry.snapshot.status == "running"
+        }) {
+            return Err(existing.snapshot.task_id.clone());
+        }
+        let task_id = format!("task-{}", Uuid::new_v4());
+        let token = CancellationToken::new();
+        let now = Utc::now();
+        let snapshot = TaskSnapshot {
+            task_id: task_id.clone(),
+            kind: kind.into(),
+            batch_id,
+            status: "running".into(),
+            current: 0,
+            total: 0,
+            message: None,
+            error: None,
+            result: None,
+            created_at: now,
+            updated_at: now,
+        };
+        entries.insert(
+            task_id.clone(),
+            TaskEntry {
+                snapshot,
+                cancel: token.clone(),
+            },
+        );
+        Ok((task_id, token))
+    }
+
     async fn update_event(&self, task_id: &str, event: &AgentEvent) {
         let mut entries = self.entries.lock().await;
         let Some(entry) = entries.get_mut(task_id) else {
@@ -2144,7 +2186,18 @@ async fn propose(
     let tasks = state.tasks.clone();
     let batch_id = req.batch_id.clone();
     let refresh = req.refresh.unwrap_or(false);
-    let (task_id, token) = tasks.start("repair", Some(batch_id.clone())).await;
+    let (task_id, token) = match tasks.start_if_idle("repair", Some(batch_id.clone())).await {
+        Ok(value) => value,
+        Err(existing_task_id) => {
+            return Json(serde_json::json!({
+                "ok": false,
+                "error": format!(
+                    "LLM repair is already running for this batch (task_id={existing_task_id})"
+                ),
+                "task_id": existing_task_id,
+            }));
+        }
+    };
     let worker_token = token.clone();
     let monitor_task_id = task_id.clone();
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(64);
@@ -2842,6 +2895,25 @@ mod tests {
         assert!(token.is_cancelled());
         registry.finish(&task_id, None).await;
         assert_eq!(registry.get(&task_id).await.unwrap().status, "cancelled");
+    }
+
+    #[tokio::test]
+    async fn task_registry_rejects_duplicate_running_repairs() {
+        let registry = TaskRegistry::new();
+        let (first, _token) = registry
+            .start_if_idle("repair", Some("batch-1".into()))
+            .await
+            .expect("first task should start");
+        let duplicate = registry
+            .start_if_idle("repair", Some("batch-1".into()))
+            .await
+            .expect_err("second task for the same batch must be rejected");
+        assert_eq!(duplicate, first);
+        let other = registry
+            .start_if_idle("repair", Some("batch-2".into()))
+            .await
+            .expect("a different batch may start");
+        assert_ne!(other.0, first);
     }
 
     #[tokio::test]

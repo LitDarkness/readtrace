@@ -8321,6 +8321,115 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[tokio::test]
+    async fn repair_batch_retries_only_failed_pages_by_default() {
+        struct FlakyProvider {
+            calls: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+        }
+
+        #[async_trait]
+        impl LlmProvider for FlakyProvider {
+            async fn repair_page(
+                &self,
+                page: &OcrPage,
+                _mode: &InputMode,
+                _prompt: &str,
+            ) -> Result<RepairResponse> {
+                let mut calls = self.calls.lock().expect("call log lock");
+                let seen = calls.iter().filter(|id| *id == &page.page_id).count();
+                calls.push(page.page_id.clone());
+                drop(calls);
+                if page.raw_text.contains("page 2") && seen == 0 {
+                    return Err(anyhow!("transient provider failure"));
+                }
+                Ok(RepairResponse {
+                    repaired_text: format!("clean:{}", page.raw_text),
+                    notes: vec![],
+                    usage: Usage {
+                        input_tokens: Some(1),
+                        output_tokens: Some(1),
+                        cached_input_tokens: None,
+                        reasoning_tokens: None,
+                        total_tokens: Some(2),
+                    },
+                    request_id: None,
+                    duration_ms: 0,
+                })
+            }
+
+            async fn propose_corrections(
+                &self,
+                _page: &OcrPage,
+                _mode: &InputMode,
+            ) -> Result<CorrectionResponse> {
+                Ok(CorrectionResponse {
+                    patches: vec![],
+                    usage: Usage::unknown(),
+                    request_id: None,
+                })
+            }
+
+            async fn answer(
+                &self,
+                _query: &str,
+                _context: &[SearchHit],
+            ) -> Result<(String, Usage)> {
+                Ok(("ok".into(), Usage::unknown()))
+            }
+
+            fn name(&self) -> &str {
+                "flaky-test"
+            }
+        }
+
+        let root = std::env::temp_dir().join(format!("readtrace-retry-{}", Uuid::new_v4()));
+        let input = root.join("input");
+        fs::create_dir_all(&input).unwrap();
+        fs::write(input.join("1.txt"), "page 1").unwrap();
+        fs::write(input.join("2.txt"), "page 2").unwrap();
+        let store = ProjectStore::init(root.join("vault")).unwrap();
+        let batch = store
+            .import_folder(&input, InputMode::PlainText, "filename", None)
+            .unwrap();
+        store
+            .run_ocr(&batch, &MockOcrProvider, CancellationToken::new(), None)
+            .await
+            .unwrap();
+        let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let provider = FlakyProvider {
+            calls: calls.clone(),
+        };
+        let config = AppConfig {
+            pricing_version: "test".into(),
+            ..Default::default()
+        };
+        let first = store
+            .repair_batch(&batch, &provider, &config, "repair", None, false, None)
+            .await
+            .unwrap();
+        assert_eq!(first.pages.len(), 1);
+        assert_eq!(first.errors.len(), 1);
+
+        let second = store
+            .repair_batch(&batch, &provider, &config, "repair", None, false, None)
+            .await
+            .unwrap();
+        assert_eq!(second.pages.len(), 2);
+        assert!(second.errors.is_empty());
+        let calls = calls.lock().unwrap().clone();
+        assert_eq!(
+            calls.len(),
+            3,
+            "second run should retry only the failed page"
+        );
+        let page_one = calls
+            .iter()
+            .filter(|id| *id == &second.pages[0].page_id)
+            .count();
+        assert_eq!(page_one, 1, "successful page must be reused");
+        let _ = fs::remove_dir_all(root);
+    }
+
     #[test]
     fn codex_json_events_expose_usage_and_final_message() {
         let output = concat!(

@@ -136,6 +136,8 @@ enum Commands {
         thinking: Option<String>,
         #[arg(long)]
         prompt_file: Option<PathBuf>,
+        /// Re-run pages with successful checkpoints instead of resuming only
+        /// missing or failed pages.
         #[arg(long)]
         refresh: bool,
         #[arg(long, value_enum)]
@@ -155,6 +157,8 @@ enum Commands {
         thinking: Option<String>,
         #[arg(long)]
         prompt_file: Option<PathBuf>,
+        /// Re-run pages with successful checkpoints instead of resuming only
+        /// missing or failed pages.
         #[arg(long)]
         refresh: bool,
         #[arg(long, value_enum)]
@@ -292,6 +296,8 @@ enum Commands {
         no_copy: bool,
         #[arg(long)]
         prompt_file: Option<PathBuf>,
+        /// Re-run successful pages during the repair stage instead of
+        /// resuming only missing or failed pages.
         #[arg(long)]
         refresh_repair: bool,
         #[arg(long, value_enum)]
