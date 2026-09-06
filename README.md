@@ -204,7 +204,7 @@ cargo run --quiet -p readtrace-cli -- serve ./workspace --bind 127.0.0.1:8787
 cargo run --quiet -p readtrace-cli -- vault-create ./workspace <名称>
 ~~~
 
-工作台支持 Workspace/Vault 切换、文件树、导入队列、批次处理、跨 batch 合并、clean 预览和编辑、来源配置、检索、引用问答以及后台 Token/费用查看。
+工作台支持 Workspace/Vault 切换、文件树、导入队列、批次处理、跨 batch 合并、clean 预览和编辑、来源配置、检索、引用问答以及后台 Token/费用查看。批次页选择 Codex 来源后会自动使用对应的 `codex-cli`/`gpt-5.6-luna` profile；如果只想把图片或 PDF 的规范化 OCR 直接合并，可使用“直接合并 OCR”或导入队列的“OCR + 规范化后直接发布（跳过 LLM）”，结果会保留警告。
 
 ## 5. CLI 的完整流程 (可选)
 

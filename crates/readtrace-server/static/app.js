@@ -224,7 +224,46 @@ async function loadUsage() { const result = await api('/api/usage'); const summa
 async function refresh() { await Promise.all([loadWorkspace(), loadBatches(), loadFiles(), loadUnits(), loadUsage(), loadTasks()]); if ($('view-backend').classList.contains('active')) await loadActivity(); }
 async function waitTask(taskId) { for (let attempt = 0; attempt < 180; attempt += 1) { const result = await api(`/api/tasks/${encodeURIComponent(taskId)}`); if (result.task && result.task.status !== 'running') { const task = result.task; if (task.status !== 'completed') { const detail = task.result ? `\n${pretty(task.result)}` : ''; throw new Error(`${task.error || '任务未完成'}${detail}`); } return task; } await new Promise((resolve) => setTimeout(resolve, 1000)); } throw new Error('任务等待超时；请打开“后台”查看任务详情'); }
 async function runQueuedPipeline(batchId, item) { const ocr = await post('/api/ocr', { batch_id: batchId, provider: item.ocr }); if (!ocr.ok) throw new Error(ocr.error); await waitTask(ocr.task_id); const normalized = await post('/api/normalize', { batch_id: batchId }); if (!normalized.ok) throw new Error(normalized.error); const profile = providerById(item.provider); const repair = await post('/api/repair', { batch_id: batchId, profile_id: profile?.id || item.provider, provider: profile?.kind, speed: item.thinking || item.speed, ...(item.model ? { model: item.model } : {}) }); if (!repair.ok) throw new Error(repair.error); await waitTask(repair.task_id); const merged = await post('/api/merge', { batch_id: batchId, confirm: true, clean_name: item.cleanName || undefined }); if (!merged.ok) throw new Error(merged.error); return merged; }
-function renderQueue() { const box = $('importQueue'); $('queueCount').textContent = state.queue.length; $('queueRun').disabled = !state.queue.length; if ($('queueProcessAll')) $('queueProcessAll').disabled = !state.queue.length; box.replaceChildren(); if (!state.queue.length) { box.className = 'queue-list empty-state'; box.textContent = '还没有待导入素材'; return; } box.className = 'queue-list'; state.queue.forEach((item, index) => { const row = document.createElement('div'); row.className = 'queue-item'; const clean = item.cleanName ? ` · clean/${item.cleanName}/document.md` : ''; const title = item.uploadFiles?.length ? `本地选择 · ${item.uploadFiles.length} 个文件` : item.path; const detail = item.uploadFiles?.length ? item.uploadFiles.map((file) => file.webkitRelativePath || file.name).slice(0, 2).join('、') : item.path; row.innerHTML = `<span class="queue-index">${String(index + 1).padStart(2, '0')}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)} · ${item.mode} · ${item.copy ? '复制原素材' : '外部引用'}${escapeHtml(clean)}</small></span>`; const remove = document.createElement('button'); remove.className = 'icon-button'; remove.textContent = '×'; remove.onclick = () => { state.queue.splice(index, 1); renderQueue(); }; row.append(remove); box.append(row); }); }
+function renderQueue() {
+  const box = $('importQueue');
+  $('queueCount').textContent = state.queue.length;
+  $('queueRun').disabled = !state.queue.length;
+  if ($('queueProcessAll')) $('queueProcessAll').disabled = !state.queue.length;
+  box.replaceChildren();
+  if (!state.queue.length) {
+    box.className = 'queue-list empty-state';
+    box.textContent = '还没有待导入素材';
+    return;
+  }
+  box.className = 'queue-list';
+  const actions = {
+    none: '稍后处理',
+    direct: 'TXT/MD 直接发布',
+    'ocr-direct': 'OCR 后直接发布（跳过 LLM）',
+    preview: '进入批次处理',
+    auto: 'OCR、修复并发布',
+  };
+  state.queue.forEach((item, index) => {
+    const row = document.createElement('div');
+    row.className = 'queue-item';
+    const clean = item.cleanName ? ` · clean/${item.cleanName}/document.md` : '';
+    const title = item.uploadFiles?.length ? `本地选择 · ${item.uploadFiles.length} 个文件` : item.path;
+    const detail = item.uploadFiles?.length
+      ? item.uploadFiles.map((file) => file.webkitRelativePath || file.name).slice(0, 2).join('、')
+      : item.path;
+    const action = actions[item.merge] || '稍后处理';
+    row.innerHTML = `<span class="queue-index">${String(index + 1).padStart(2, '0')}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)} · ${item.mode} · ${item.copy ? '复制原素材' : '外部引用'} · ${escapeHtml(action)}${escapeHtml(clean)}</small></span>`;
+    const remove = document.createElement('button');
+    remove.className = 'icon-button';
+    remove.textContent = '×';
+    remove.onclick = () => {
+      state.queue.splice(index, 1);
+      renderQueue();
+    };
+    row.append(remove);
+    box.append(row);
+  });
+}
 async function runQueue() { if (!state.queue.length) return; const items = [...state.queue]; state.queue = []; renderQueue(); const results = []; let previewBatch = null; for (const item of items) { try { const result = await post('/api/import', { path: item.path, mode: item.mode, no_copy: !item.copy }); if (!result.ok) throw new Error(result.error); const batchId = result.batch.batch_id; results.push(batchId); if (item.merge === 'auto') await runQueuedPipeline(batchId, item); if (item.merge === 'preview' && !previewBatch) previewBatch = batchId; toast(`已导入 ${batchId}`); } catch (error) { results.push(`失败：${error.message}`); toast(error.message, true); } } show('importOut', { batches: results }); await refresh(); const first = results.find((value) => !value.startsWith('失败')); if (previewBatch || ($('afterImport').value === 'process' && first)) { $('batch').value = previewBatch || first; go('process'); } else go('files'); }
 async function processOcr() { const batch = selectedBatch(); if (!batch) return; setProcessStatus('OCR 启动中…', 'running'); const result = await post('/api/ocr', { batch_id: batch, provider: $('ocrProvider').value }); show('processOut', result); if (result.ok) { setProcessStatus('OCR 处理中…', 'running', '', result.task_id); toast('OCR 已开始'); loadTasks(); } else { setProcessStatus('OCR 启动失败', 'failed', result.error || ''); toast(result.error, true); } }
 async function processNormalize() { const batch = selectedBatch(); if (!batch) return; setProcessStatus('规范化处理中…', 'running'); const result = await post('/api/normalize', { batch_id: batch, refresh: true }); show('processOut', result); if (result.ok) { const changed = (result.report?.pages || []).reduce((sum, page) => sum + (page.changes?.length || 0), 0); setProcessStatus('规范化已完成', 'completed', `${changed} 处确定性修改`); toast('确定性清洗完成'); } else { setProcessStatus('规范化失败', 'failed', result.error || ''); toast(result.error, true); } }
@@ -644,6 +683,60 @@ function providerShortName(profile) {
   const keyState = profile.kind === 'http' ? ` · ${profile.key_present ? 'Key 已配置' : '未配置 Key'}` : '';
   return `${profile.name} · ${origin}${keyState}`;
 }
+function normalizedThinking(value) {
+  return value === 'mid' ? 'medium' : value;
+}
+// Keep the browser request explicit.  The server still resolves and validates
+// the profile, but sending its backend/model/preset here prevents a stale GLM
+// value from leaking into a Codex request when the user switches selectors.
+function profileRequestFields(profileId, thinking, modelOverride = '') {
+  const profile = providerById(profileId);
+  const body = {
+    profile_id: profile?.id || profileId,
+    provider: profile?.kind || profileId,
+    thinking: thinking || normalizedThinking(profile?.thinking_mode) || 'none',
+  };
+  if (profile?.kind === 'codex-cli') {
+    body.model = profile.model || 'gpt-5.6-luna';
+    if (profile.id === 'codex-luna') body.preset = 'codex-luna';
+  } else if (!profile && modelOverride.trim()) {
+    body.model = modelOverride.trim();
+  }
+  return body;
+}
+function syncProviderControls(providerId, modelId, thinkingId) {
+  const select = $(providerId);
+  const profile = providerById(select?.value);
+  if (!profile) return;
+  const thinking = $(thinkingId);
+  const defaultThinking = normalizedThinking(profile.thinking_mode);
+  if (thinking && ['none', 'low', 'medium', 'high'].includes(defaultThinking)) thinking.value = defaultThinking;
+  const model = $(modelId);
+  if (!model) return;
+  const codex = profile.kind === 'codex-cli';
+  model.disabled = codex;
+  model.title = codex ? 'Codex 来源会使用所选来源中的模型' : '';
+  if (codex) {
+    model.value = profile.model || 'gpt-5.6-luna';
+    model.placeholder = '由 Codex 来源管理';
+  } else {
+    if (model.dataset.previousProviderKind === 'codex-cli') model.value = '';
+    model.placeholder = '留空使用来源配置';
+  }
+  model.dataset.previousProviderKind = profile.kind;
+}
+function bindProviderControls(providerId, modelId, thinkingId) {
+  const select = $(providerId);
+  if (!select || select.dataset.profileControlsBound === 'true') return;
+  select.addEventListener('change', () => syncProviderControls(providerId, modelId, thinkingId));
+  select.dataset.profileControlsBound = 'true';
+  syncProviderControls(providerId, modelId, thinkingId);
+}
+function prepareLlmSelectionUi() {
+  bindProviderControls('provider', 'model', 'speed');
+  bindProviderControls('queueProvider', 'queueModel', 'queueSpeed');
+  bindProviderControls('answerProvider', null, 'answerThinking');
+}
 function renderProviderSelect(id, preferredId) {
   const select = $(id);
   if (!select) return;
@@ -725,6 +818,7 @@ async function loadProviders(selectId) {
   if (selectId) state.currentProvider = providerById(selectId) || state.currentProvider;
   if (!state.currentProvider) state.currentProvider = defaultProvider();
   ['provider', 'queueProvider', 'answerProvider'].forEach((id) => renderProviderSelect(id, selectId));
+  prepareLlmSelectionUi();
   renderProviderList();
   fillProviderForm(state.currentProvider);
   const hint = $('providerStoreHint');
@@ -803,11 +897,7 @@ const originalLlmBody = llmBody;
 llmBody = function profileLlmBody(provider) {
   const body = originalLlmBody(provider);
   if (!body) return null;
-  const profile = providerById(provider);
-  if (profile) {
-    body.profile_id = profile.id;
-    body.provider = profile.kind;
-  }
+  Object.assign(body, profileRequestFields(provider, $('speed').value, $('model').value));
   return body;
 };
 async function runQueuedPipeline(batchId, item) {
@@ -817,13 +907,19 @@ async function runQueuedPipeline(batchId, item) {
   if (ocrTask.status !== 'completed') throw new Error(ocrTask.error || 'OCR 失败');
   const normalized = await post('/api/normalize', { batch_id: batchId });
   if (!normalized.ok) throw new Error(normalized.error);
-  const profile = providerById(item.provider);
+  if (item.merge === 'ocr-direct') {
+    const merged = await post('/api/merge', {
+      batch_id: batchId,
+      confirm: true,
+      allow_unrepaired: true,
+      ...(item.cleanName ? { clean_name: item.cleanName } : {}),
+    });
+    if (!merged.ok) throw new Error(merged.error || 'OCR 直接合并失败');
+    return merged;
+  }
   const repair = await post('/api/repair', {
     batch_id: batchId,
-    profile_id: profile?.id || item.provider,
-    provider: profile?.kind,
-    thinking: item.thinking,
-    ...(item.model ? { model: item.model } : {}),
+    ...profileRequestFields(item.provider, item.thinking || item.speed, item.model || ''),
   });
   if (!repair.ok) throw new Error(repair.error);
   const repairTask = await waitTask(repair.task_id);
@@ -845,12 +941,12 @@ answer = async function profileAnswer() {
   const status = $('chatStatus');
   if (status) status.textContent = '正在询问模型…';
   try {
-    const profile = providerById($('answerProvider').value);
     const result = await post('/api/answer', {
       query: question,
-      profile_id: profile?.id,
-      provider: profile?.kind,
-      thinking: $('answerThinking')?.value || 'none',
+      ...profileRequestFields(
+        $('answerProvider').value,
+        $('answerThinking')?.value || 'none',
+      ),
       source_refs: [...refs],
       quotes,
       session_id: state.answerSessionId,
@@ -889,7 +985,7 @@ function normalizeSelectorLabels() {
   const replace = (id, options) => {
     const select = $(id);
     if (!select) return;
-    const current = select.value;
+    const current = select.value === 'mid' ? 'medium' : select.value;
     select.replaceChildren(...options.map(([label, value]) => new Option(label, value)));
     select.value = options.some(([, value]) => value === current) ? current : options[0][1];
   };
@@ -1220,7 +1316,10 @@ runQueue = async function enhancedRunQueue() {
         });
         if (!direct.ok) throw new Error(direct.error || 'TXT/MD 直接发布失败');
         toast(`已直接发布到 ${direct.clean_path || 'clean/'}`);
-      } else if (item.merge === 'auto') await runQueuedPipeline(batchId, item);
+      } else if (item.merge === 'auto' || item.merge === 'ocr-direct') {
+        const processed = await runQueuedPipeline(batchId, item);
+        if (item.merge === 'ocr-direct') toast(`已跳过 LLM，OCR 结果已发布到 ${processed.clean_path || 'clean/'}`);
+      }
       if (item.merge === 'preview' && !previewBatch) { previewBatch = batchId; firstCleanName = item.cleanName || ''; }
       toast(`已导入 ${batchId}`);
     } catch (error) {
@@ -1268,3 +1367,9 @@ mergeUnits = async function enhancedMergeUnits(confirm) {
   }
 };
 prepareQueueCleanNameUi();
+prepareLlmSelectionUi();
+if ($('mergeOcr')) $('mergeOcr').onclick = () => {
+  const checkbox = $('allowUnrepaired');
+  if (checkbox) checkbox.checked = true;
+  processMerge(false);
+};

@@ -69,7 +69,7 @@ cargo run --quiet -p readtrace-cli -- serve ./workspace --bind 127.0.0.1:8787
 
 OCR 任务的 `current/total` 以页为单位。单个 PDF 会先显示 `0/25 · rendering PDF (25 pages)`，随后随着页级 Poppler 栅格化和 Tesseract 识别显示 `n/25 · rendered PDF page p/25`、`n/25 · OCR page p/25`，最终为 `25/25 · OCR complete (25 pages)`；多个文件的总数仍会在任务结束时收敛为实际页数。PDF 页数由 Poppler 的 `pdfinfo` 读取，读取失败时退回单进程栅格化并仍显示可用的实际页数。页面默认有界并行 4 路，可在 `.env` 用 `READTRACE_OCR_CONCURRENCY=1..16` 调整；完成顺序可以不同，但写入的 page number 和最终文档顺序稳定。
 
-repair 请求的 `provider` 可选 `http`、`codex-cli`、`mock`，另可传 `profile_id`（来源与 API 页面保存的来源）、`preset`、`model`、`thinking` 或 `speed=low|mid|high`。`refresh` 默认是 `false`：已有且仍匹配当前规范化文本的成功 checkpoint 会直接复用，只有失败或缺失页重新调用模型；显式传 `refresh:true` 才会重跑全部页面。并发上限由 `.env` 的 `READTRACE_LLM_CONCURRENCY` 控制。`POST /api/answer` 使用同一套 `profile_id`、`provider` 和 `thinking` 字段，因此处理和对话不会出现两套配置语义；为兼容旧网页，若 `provider` 本身是 profile id（如 `tsinghua-glm-5.2`），服务端会先按 profile 查找再解析 backend。
+repair 请求的 `provider` 可选 `http`、`codex-cli`、`mock`，另可传 `profile_id`（来源与 API 页面保存的来源）、`preset`、`model`、`thinking` 或 `speed=low|mid|high`。`refresh` 默认是 `false`：已有且仍匹配当前规范化文本的成功 checkpoint 会直接复用，只有失败或缺失页重新调用模型；显式传 `refresh:true` 才会重跑全部页面。并发上限由 `.env` 的 `READTRACE_LLM_CONCURRENCY` 控制。`POST /api/answer` 使用同一套 `profile_id`、`provider` 和 `thinking` 字段，因此处理和对话不会出现两套配置语义；为兼容旧网页，若 `provider` 本身是 profile id（如 `tsinghua-glm-5.2`），服务端会先按 profile 查找再解析 backend。网页选中 `codex-luna` 时会同时发送 `profile_id=codex-luna`、`provider=codex-cli`、`preset=codex-luna` 和 `model=gpt-5.6-luna`，不会把之前 HTTP 来源的 GLM 模型带进 Codex 请求；自定义 Codex 来源则使用其来源配置中的模型。
 
 ### 来源与密钥
 
@@ -79,7 +79,7 @@ Web 的“来源与 API”页提供四个内置来源：清华 GLM-5.3 Flash、�
 
 ## 合并和结果
 
-- `POST /api/merge`：同 batch 预览或确认（`confirm:false/true`）。请求可带 `allow_unrepaired:true`，显式允许视觉页在没有修复 checkpoint 时使用规范化 OCR；响应和 revision manifest 会带警告。默认仍拒绝这种合并。
+- `POST /api/merge`：同 batch 预览或确认（`confirm:false/true`）。请求可带 `allow_unrepaired:true`，显式允许视觉页在没有修复 checkpoint 时使用规范化 OCR；响应和 revision manifest 会带警告。默认仍拒绝这种合并。处理批次页的“直接合并 OCR”按钮就是这个协议：它不会启动 LLM，而是先生成预览，确认后发布带警告的 clean 文档。
 - `GET /api/merge-plan?batch_id=...`：读取可编辑计划。
 - `POST /api/merge-plan`：提交 `{ "batch_id", "plan" }`；core 只允许重排现有页，拒绝伪造 `source_ref`、增删页或修改 source 元数据。
 - `POST /api/merge-units`：跨 batch source/clean unit 预览或确认，也支持同样的 `allow_unrepaired` 显式选项；确认时可带 `clean_name`。
@@ -95,7 +95,7 @@ Web 的“来源与 API”页提供四个内置来源：清华 GLM-5.3 Flash、�
 
 1. **工作台**显示文件数、批次数、可选单元和最近文件；
 2. **文件浏览**按全部/来源/生成/清洗/审计筛选，点击即可预览图片、PDF、Markdown、TXT、JSON；勾选 source/clean 后可跨 batch 合并或删除；
-3. **导入队列**允许通过 Windows/macOS 文件选择器选择多个文件或整个文件夹，也可以输入服务端可访问路径；浏览器上传项会先进入队列并复制到当前 Vault，路径导入仍可选择保留外部引用。每项都能选择内容类型，队列底部统一设置 OCR、LLM 来源、推理强度、模型、`clean` 发布名称和合并偏好；TXT/MD 可以选择直接发布到 clean（不调用 LLM），PDF/图片则选择后续处理或自动 OCR→修复→发布；
+3. **导入队列**允许通过 Windows/macOS 文件选择器选择多个文件或整个文件夹，也可以输入服务端可访问路径；浏览器上传项会先进入队列并复制到当前 Vault，路径导入仍可选择保留外部引用。每项都能选择内容类型，队列底部统一设置 OCR、LLM 来源、推理强度、模型、`clean` 发布名称和合并偏好；TXT/MD 可以选择直接发布到 clean（不调用 LLM），PDF/图片则可选择后续处理、自动 OCR→修复→发布，或选择“OCR + 规范化后直接发布（跳过 LLM）”。后者明确允许使用带警告的规范化 OCR，不会发起任何 LLM 请求；
 4. **处理批次**按 OCR → 规范化 → LLM 修复 → revision 的步骤运行，每页修复仍由服务端并行且可在任务页取消；页面可编辑当前 Vault 的 repair prompt，保存后后续 repair 自动使用；
 5. **后台**集中显示最近事件、命令状态、完成/失败/取消结果、任务进度和 Token/费用；命令区采用终端式输出，进度事件会压缩成易读的最新状态；它位于侧边栏的工具区底部；
 6. **来源与 API**集中管理内置/自定义 Provider、Key 状态、价格和默认推理强度，可直接测试连接；
