@@ -69,7 +69,7 @@ cargo run --quiet -p readtrace-cli -- serve ./workspace --bind 127.0.0.1:8787
 
 OCR 任务的 `current/total` 以页为单位。单个 PDF 会先显示 `0/25 · rendering PDF (25 pages)`，随后随着页级 Poppler 栅格化和 Tesseract 识别显示 `n/25 · rendered PDF page p/25`、`n/25 · OCR page p/25`，最终为 `25/25 · OCR complete (25 pages)`；多个文件的总数仍会在任务结束时收敛为实际页数。PDF 页数由 Poppler 的 `pdfinfo` 读取，读取失败时退回单进程栅格化并仍显示可用的实际页数。页面默认有界并行 4 路，可在 `.env` 用 `READTRACE_OCR_CONCURRENCY=1..16` 调整；完成顺序可以不同，但写入的 page number 和最终文档顺序稳定。
 
-repair 请求的 `provider` 可选 `http`、`codex-cli`、`mock`，另可传 `profile_id`（来源与 API 页面保存的来源）、`preset`、`model`、`thinking` 或 `speed=low|mid|high`。并发上限由 `.env` 的 `READTRACE_LLM_CONCURRENCY` 控制。`POST /api/answer` 使用同一套 `profile_id`、`provider` 和 `thinking` 字段，因此处理和对话不会出现两套配置语义；为兼容旧网页，若 `provider` 本身是 profile id（如 `tsinghua-glm-5.2`），服务端会先按 profile 查找再解析 backend。
+repair 请求的 `provider` 可选 `http`、`codex-cli`、`mock`，另可传 `profile_id`（来源与 API 页面保存的来源）、`preset`、`model`、`thinking` 或 `speed=low|mid|high`。`refresh` 默认是 `false`：已有且仍匹配当前规范化文本的成功 checkpoint 会直接复用，只有失败或缺失页重新调用模型；显式传 `refresh:true` 才会重跑全部页面。并发上限由 `.env` 的 `READTRACE_LLM_CONCURRENCY` 控制。`POST /api/answer` 使用同一套 `profile_id`、`provider` 和 `thinking` 字段，因此处理和对话不会出现两套配置语义；为兼容旧网页，若 `provider` 本身是 profile id（如 `tsinghua-glm-5.2`），服务端会先按 profile 查找再解析 backend。
 
 ### 来源与密钥
 
