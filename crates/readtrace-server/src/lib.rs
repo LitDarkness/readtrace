@@ -1659,6 +1659,13 @@ async fn files(
                     ) && !matches!(item.path.as_str(), "metadata.json" | "correction_log.json")
                 });
             }
+            if query.view.as_deref().unwrap_or("essential") == "essential" {
+                // The default tree is for human material, not implementation
+                // checkpoints.  Keep original sources available for audit,
+                // while hiding generated JSON/repair internals until the user
+                // explicitly chooses “显示全部”.
+                items.retain(|item| matches!(item.category.as_str(), "sources" | "clean"));
+            }
             items.sort_by(|a, b| a.path.cmp(&b.path));
             Json(
                 serde_json::json!({"ok": true, "files": items, "root": project.root, "view": query.view.as_deref().unwrap_or("essential")}),

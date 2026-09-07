@@ -519,6 +519,7 @@ dialog label + label { margin-top: 13px; }
 .citation-file-copy small { overflow: hidden; color: #626779; font: 10px ui-monospace, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .citation-selection-count { margin-right: auto; }
 .file-quote-chip { background: #edf5ff; border-color: #cfe2f6; }
+.dialog-error { margin-top: 12px; padding: 9px 11px; border: 1px solid #f0b8b8; border-radius: 8px; background: #fff3f3; color: #a33b3b; font-size: 12px; line-height: 1.5; }
 
 /* Readability pass: secondary copy and form hints stay visibly darker than
    the canvas, while placeholders remain distinguishable from entered text. */

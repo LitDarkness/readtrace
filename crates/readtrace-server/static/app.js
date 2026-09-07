@@ -264,6 +264,61 @@ function renderQueue() {
     box.append(row);
   });
 }
+function prepareWorkspaceFormFeedback() {
+  const form = $('workspaceForm');
+  if (!form || form.dataset.feedbackBound === 'true') return;
+  const errorBox = $('workspaceError');
+  const pathInput = $('workspacePath');
+  const submit = $('workspaceSubmit');
+  const clearError = () => {
+    if (errorBox) {
+      errorBox.hidden = true;
+      errorBox.textContent = '';
+    }
+  };
+  pathInput?.addEventListener('input', clearError);
+  form.onsubmit = async (event) => {
+    if (event.submitter?.value === 'cancel') return;
+    event.preventDefault();
+    clearError();
+    if (!pathInput?.value.trim()) return;
+    if (submit) submit.disabled = true;
+    const result = await post('/api/workspace/init', {
+      path: pathInput.value.trim(),
+      vault_name: $('workspaceVault').value,
+    });
+    if (!result.ok) {
+      const message = result.error || 'Workspace 创建失败，请检查文件夹路径和权限。';
+      if (errorBox) {
+        errorBox.hidden = false;
+        errorBox.textContent = message;
+      }
+      toast(message, true);
+      if (submit) submit.disabled = false;
+      return;
+    }
+    $('workspaceDialog').close();
+    toast('Workspace 已创建并切换');
+    if (submit) submit.disabled = false;
+    refresh();
+  };
+  form.dataset.feedbackBound = 'true';
+}
+function prepareFileViewFilters() {
+  document.querySelectorAll('#fileFilters .filter').forEach((button) => {
+    if (button.dataset.viewFilterBound === 'true') return;
+    button.addEventListener('click', () => {
+      if (['generated', 'audit'].includes(state.filter) && state.fileView !== 'all') {
+        state.fileView = 'all';
+        state.expandedDirs.clear();
+        $('essentialFiles')?.classList.remove('active');
+        $('allFiles')?.classList.add('active');
+        loadFiles();
+      }
+    });
+    button.dataset.viewFilterBound = 'true';
+  });
+}
 async function runQueue() { if (!state.queue.length) return; const items = [...state.queue]; state.queue = []; renderQueue(); const results = []; let previewBatch = null; for (const item of items) { try { const result = await post('/api/import', { path: item.path, mode: item.mode, no_copy: !item.copy }); if (!result.ok) throw new Error(result.error); const batchId = result.batch.batch_id; results.push(batchId); if (item.merge === 'auto') await runQueuedPipeline(batchId, item); if (item.merge === 'preview' && !previewBatch) previewBatch = batchId; toast(`已导入 ${batchId}`); } catch (error) { results.push(`失败：${error.message}`); toast(error.message, true); } } show('importOut', { batches: results }); await refresh(); const first = results.find((value) => !value.startsWith('失败')); if (previewBatch || ($('afterImport').value === 'process' && first)) { $('batch').value = previewBatch || first; go('process'); } else go('files'); }
 async function processOcr() { const batch = selectedBatch(); if (!batch) return; setProcessStatus('OCR 启动中…', 'running'); const result = await post('/api/ocr', { batch_id: batch, provider: $('ocrProvider').value }); show('processOut', result); if (result.ok) { setProcessStatus('OCR 处理中…', 'running', '', result.task_id); toast('OCR 已开始'); loadTasks(); } else { setProcessStatus('OCR 启动失败', 'failed', result.error || ''); toast(result.error, true); } }
 async function processNormalize() { const batch = selectedBatch(); if (!batch) return; setProcessStatus('规范化处理中…', 'running'); const result = await post('/api/normalize', { batch_id: batch, refresh: true }); show('processOut', result); if (result.ok) { const changed = (result.report?.pages || []).reduce((sum, page) => sum + (page.changes?.length || 0), 0); setProcessStatus('规范化已完成', 'completed', `${changed} 处确定性修改`); toast('确定性清洗完成'); } else { setProcessStatus('规范化失败', 'failed', result.error || ''); toast(result.error, true); } }
@@ -443,11 +498,27 @@ async function openSession(sessionId) {
   if (!result.ok) return toast(result.error || '读取对话失败', true);
   const session = result.session;
   state.answerSessionId = session.session_id;
+  const isQuoteRef = (ref) => String(ref || '').startsWith('quote:');
   state.chatMessages = (session.messages || [])
     .filter((message) => ['user', 'assistant', 'error'].includes(message.role))
-    .map((message) => ({ role: message.role, content: message.content, source_refs: message.source_refs || [] }));
-  state.answerRefs = new Set((session.messages || []).flatMap((message) => message.source_refs || []));
-  state.answerQuotes = new Map();
+    .map((message) => ({
+      role: message.role,
+      content: message.content,
+      source_refs: (message.source_refs || []).filter((ref) => !isQuoteRef(ref)),
+    }));
+  state.answerRefs = new Set(
+    (session.messages || [])
+      .flatMap((message) => message.source_refs || [])
+      .filter((ref) => !isQuoteRef(ref)),
+  );
+  state.answerQuotes = new Map(
+    (session.evidence || [])
+      .filter((excerpt) => isQuoteRef(excerpt.source_ref))
+      .map((excerpt, index) => [
+        excerpt.source_ref,
+        { path: `对话引用 ${index + 1}`, text: excerpt.text || '', persisted: true },
+      ]),
+  );
   renderChat();
   renderAnswerRefs();
   const status = $('chatStatus');
@@ -478,6 +549,7 @@ function collectAnswerRefs() {
 
 function collectAnswerQuotes() {
   return [...(state.answerQuotes || new Map()).values()]
+    .filter((quote) => !quote.persisted)
     .map((quote) => quote.text)
     .filter(Boolean);
 }
@@ -933,6 +1005,11 @@ answer = async function profileAnswer() {
   if (!question) return toast('先写下问题', true);
   const refs = collectAnswerRefs();
   const quotes = collectAnswerQuotes();
+  const sentQuoteIds = new Set(
+    [...(state.answerQuotes || new Map()).entries()]
+      .filter(([, quote]) => !quote.persisted && quote.text)
+      .map(([id]) => id),
+  );
   renderAnswerRefs();
   const button = $('answer');
   if (button) button.disabled = true;
@@ -958,6 +1035,10 @@ answer = async function profileAnswer() {
       return;
     }
     state.answerSessionId = result.session_id || state.answerSessionId;
+    sentQuoteIds.forEach((id) => {
+      const quote = state.answerQuotes.get(id);
+      if (quote) quote.persisted = true;
+    });
     state.chatMessages.push({ role: 'assistant', content: result.answer || '模型未返回答案。', source_refs: result.source_refs || [], usage: result.usage });
     $('question').value = '';
     if (status) status.textContent = `会话 ${state.answerSessionId || '—'} · 可继续追问`;
@@ -1367,6 +1448,8 @@ mergeUnits = async function enhancedMergeUnits(confirm) {
   }
 };
 prepareQueueCleanNameUi();
+prepareWorkspaceFormFeedback();
+prepareFileViewFilters();
 prepareLlmSelectionUi();
 if ($('mergeOcr')) $('mergeOcr').onclick = () => {
   const checkbox = $('allowUnrepaired');

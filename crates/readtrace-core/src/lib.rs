@@ -4355,7 +4355,12 @@ impl<'a, P: LlmProvider + ?Sized> AgentLoop<'a, P> {
             .map(|message| ConversationTurn {
                 role: message.role.clone(),
                 content: message.content.clone(),
-                source_refs: message.source_refs.clone(),
+                source_refs: message
+                    .source_refs
+                    .iter()
+                    .filter(|reference| !reference.starts_with("quote:"))
+                    .cloned()
+                    .collect(),
             })
             .collect::<Vec<_>>();
         let context = AnswerContext {
@@ -4405,6 +4410,7 @@ impl<'a, P: LlmProvider + ?Sized> AgentLoop<'a, P> {
             hits.iter()
                 .flat_map(|hit| hit.source_refs.clone())
                 .chain(excerpts.iter().map(|excerpt| excerpt.source_ref.clone()))
+                .filter(|reference| !reference.starts_with("quote:"))
                 .collect(),
         );
         session.messages.push(SessionMessage {
@@ -7847,6 +7853,10 @@ mod tests {
             .source_refs
             .iter()
             .any(|reference| reference == &source_ref));
+        assert!(first_session.messages[0]
+            .source_refs
+            .iter()
+            .all(|reference| !reference.starts_with("quote:")));
 
         let second_request = ConversationRequest {
             message: "结合上一轮，谁提供了补充信息？".into(),
@@ -7867,6 +7877,10 @@ mod tests {
             .source_refs
             .iter()
             .any(|reference| reference == &source_ref));
+        assert!(second_session.messages[2]
+            .source_refs
+            .iter()
+            .all(|reference| !reference.starts_with("quote:")));
         assert!(second_answer.contains("门外正在下雨"));
         let _ = fs::remove_dir_all(root);
     }
